@@ -8,8 +8,17 @@ import librosa
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    current_user,
+    login_user,
+    login_required,
+    logout_user,
+)
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -22,26 +31,50 @@ load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "saved_models", "voice_model.pkl")
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+DEFAULT_SQLITE_PATH = os.path.join(INSTANCE_DIR, "neuroscreen.db")
+
+os.makedirs(INSTANCE_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-    "SQLITE_URL", "sqlite:///neuroscreen.db"
+    "SQLITE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH}"
 )
 # app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
 #     "MYSQL_URL", "mysql+pymysql://user:password@localhost/neuroscreen"
 # )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message_category = "warning"
+
+
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+
+    tests = db.relationship("PatientTest", backref="user", lazy=True)
 
 
 class PatientTest(db.Model):
     __tablename__ = "patient_tests"
 
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     risk_score = db.Column(db.Integer, nullable=False)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 
 if not os.path.exists(MODEL_PATH):
@@ -61,7 +94,66 @@ def create_database_tables():
         tables_created = True
 
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if not username or not password:
+            flash("Username and password are required.", "danger")
+            return render_template("register.html")
+
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash("That username is already taken.", "danger")
+            return render_template("register.html")
+
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+        )
+        db.session.add(user)
+        db.session.commit()
+        flash("Registration complete. Please log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        user = User.query.filter_by(username=username).first()
+        if user is None or not check_password_hash(user.password_hash, password):
+            flash("Invalid username or password.", "danger")
+            return render_template("login.html")
+
+        login_user(user)
+        return redirect(url_for("home"))
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("You have been logged out.", "info")
+    return redirect(url_for("login"))
+
+
 @app.route("/upload_voice", methods=["POST"])
+@login_required
 def upload_voice():
     audio_file = request.files.get("file") or request.files.get("voice")
 
@@ -196,6 +288,7 @@ def upload_voice():
         risk_score = max(0, min(100, risk_score))
 
         test_record = PatientTest(risk_score=risk_score)
+        test_record.user_id = current_user.id
         db.session.add(test_record)
         db.session.commit()
 
@@ -217,17 +310,34 @@ def upload_voice():
             os.remove(tmp_path)
 
 
-# @app.route("/")
-# def health_check():
-#     return (
-#         jsonify({"success": True, "message": "NeuroScreen Flask server is running."}),
-#         200,
-#     )
+@app.route("/api/history")
+@login_required
+def api_history():
+    records = (
+        PatientTest.query.filter_by(user_id=current_user.id)
+        .order_by(PatientTest.timestamp.asc())
+        .all()
+    )
+
+    return jsonify(
+        {
+            "success": True,
+            "history": [
+                {
+                    "id": record.id,
+                    "timestamp": record.timestamp.isoformat(),
+                    "risk_score": record.risk_score,
+                }
+                for record in records
+            ],
+        }
+    )
 
 
 @app.route("/")
+@login_required
 def home():
-    return render_template("index.html")
+    return render_template("index.html", username=current_user.username)
 
 
 if __name__ == "__main__":

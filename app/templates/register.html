@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuroScreen Register</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 24px 60px -24px rgba(15, 23, 42, 0.24)'
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-white text-slate-800">
+  <main class="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-10">
+    <section class="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-8 shadow-soft">
+      <div class="mb-8 text-center">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">NeuroScreen</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Create account</h1>
+        <p class="mt-2 text-sm text-slate-600">Set up a secure login to access your voice screening dashboard.</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="mb-6 space-y-3">
+            {% for category, message in messages %}
+              <div class="rounded-2xl border px-4 py-3 text-sm {% if category == 'error' or category == 'danger' %}border-rose-200 bg-rose-50 text-rose-700{% else %}border-amber-200 bg-amber-50 text-amber-800{% endif %}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" class="space-y-5">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700" for="username">Username</label>
+          <input id="username" name="username" type="text" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-0 transition focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100" />
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700" for="password">Password</label>
+          <input id="password" name="password" type="password" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-0 transition focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100" />
+        </div>
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700">Create Account</button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-slate-600">Already have an account? <a href="{{ url_for('login') }}" class="font-semibold text-sky-700 hover:text-sky-800">Sign in</a></p>
+    </section>
+  </main>
+</body>
+</html>

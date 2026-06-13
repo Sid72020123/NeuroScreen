@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NeuroScreen: Voice Analysis</title>
+  <title>NeuroScreen Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -19,83 +20,149 @@
   </script>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-white text-slate-800">
-  <main class="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-    <section class="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-soft">
-      <div class="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-white px-6 py-8 sm:px-10">
+  <main class="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <header class="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-200/80 bg-white px-6 py-5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+      <div>
         <p class="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">NeuroScreen</p>
-        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Voice Analysis</h1>
-        <p class="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-          Upload a clean WAV recording to estimate Parkinson's voice risk with a fast acoustic screen.
-        </p>
+        <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Voice Analysis Dashboard</h1>
+        <p class="mt-2 text-sm text-slate-600">Welcome, {{ username }}. Upload a voice sample to generate a privacy-conscious screening report.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">{{ username }}</div>
+        <a href="{{ url_for('logout') }}" class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">Logout</a>
+      </div>
+    </header>
+
+    <section class="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft sm:p-8">
+        <div class="mb-6">
+          <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Voice Upload</p>
+          <h2 class="mt-2 text-2xl font-semibold text-slate-900">Analyze a WAV file</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Use a clear voice recording with minimal background noise for the best screening result.</p>
+        </div>
+
+        <form id="voiceForm" class="space-y-4" enctype="multipart/form-data">
+          <label id="dropZone" for="voiceFile" class="flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-sky-200 bg-sky-50/70 px-6 py-8 text-center transition hover:border-sky-300 hover:bg-sky-50">
+            <input id="voiceFile" name="file" type="file" accept=".wav, audio/*" class="sr-only" required />
+            <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-sky-100">
+              <svg class="h-7 w-7 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 15V3" />
+                <path d="M7 8l5-5 5 5" />
+                <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+              </svg>
+            </div>
+            <p class="mt-4 text-lg font-semibold text-slate-900">Drag and drop your `.wav` file</p>
+            <p class="mt-2 text-sm text-slate-600">or click to browse from your device</p>
+            <p id="fileName" class="mt-4 text-xs font-medium text-slate-500">No file selected</p>
+          </label>
+
+          <button id="submitBtn" type="submit" class="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-600 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400">
+            <span id="buttonSpinner" class="hidden h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+            <span id="buttonText">Analyze</span>
+          </button>
+          <p id="statusText" class="min-h-[1.25rem] text-sm text-slate-500"></p>
+        </form>
       </div>
 
-      <div class="px-6 py-8 sm:px-10">
-        <form id="voiceForm" class="space-y-6" enctype="multipart/form-data">
-          <div>
-            <label for="voiceFile" class="mb-2 block text-sm font-medium text-slate-700">Voice recording</label>
-            <div class="flex flex-col gap-3 rounded-2xl border border-dashed border-sky-200 bg-sky-50/60 p-5 transition hover:border-sky-300 hover:bg-sky-50">
-              <input
-                id="voiceFile"
-                name="file"
-                type="file"
-                accept=".wav, audio/*"
-                class="block w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-sky-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-sky-700"
-                required
-              />
-              <p class="text-xs leading-5 text-slate-500">
-                Supported formats: WAV and other audio files accepted by the browser. Best results come from a short, clear sample with minimal background noise.
-              </p>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button
-              id="submitBtn"
-              type="submit"
-              class="inline-flex items-center justify-center rounded-xl bg-sky-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
-              Analyze Voice
-            </button>
-            <p id="statusText" class="text-sm text-slate-500"></p>
-          </div>
-        </form>
-
-        <section id="resultsSection" class="mt-8 hidden rounded-3xl border border-slate-200 bg-slate-50 p-6 sm:p-8">
-          <div class="grid gap-6 md:grid-cols-[minmax(0,280px)_1fr] md:items-center">
-            <div class="mx-auto w-full max-w-xs">
-              <div class="relative aspect-square w-full">
-                <canvas id="riskChart"></canvas>
-              </div>
-            </div>
-            <div class="space-y-4 text-center md:text-left">
+      <div class="space-y-6">
+        <section class="grid gap-6 lg:grid-cols-2">
+          <div class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft sm:p-8">
+            <div class="mb-4 flex items-center justify-between">
               <div>
-                <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Risk Score</p>
-                <h2 id="riskLabel" class="mt-2 text-3xl font-semibold text-slate-900">--</h2>
+                <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Current Risk Score</p>
+                <h2 class="mt-1 text-xl font-semibold text-slate-900">Latest analysis</h2>
               </div>
-              <p id="riskDescription" class="text-base leading-7 text-slate-600">
-                Your analysis result will appear here after the upload is processed.
-              </p>
-              <div class="rounded-2xl bg-white p-4 text-sm leading-6 text-slate-500 shadow-sm ring-1 ring-slate-200">
-                The chart shows the probability returned by the model on a 0-100 scale.
-              </div>
+              <div id="currentScoreBadge" class="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">--</div>
             </div>
+            <div class="relative mx-auto aspect-square max-w-[360px]">
+              <canvas id="riskChart"></canvas>
+            </div>
+            <p id="riskDescription" class="mt-4 text-center text-sm leading-6 text-slate-600">No analysis yet. Upload a voice sample to populate the score.</p>
+          </div>
+
+          <div class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft sm:p-8">
+            <div class="mb-4">
+              <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Patient History Trend</p>
+              <h2 class="mt-1 text-xl font-semibold text-slate-900">Risk over time</h2>
+            </div>
+            <div class="h-[360px]">
+              <canvas id="historyChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft sm:p-8">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Doctor Report</p>
+              <h2 class="mt-1 text-2xl font-semibold text-slate-900">Printable PDF summary</h2>
+              <p class="mt-2 text-sm leading-6 text-slate-600">Generate a clean A4 report with the current score, username, and both charts.</p>
+            </div>
+            <button id="downloadPdfBtn" type="button" class="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100">
+              Download Doctor Report (PDF)
+            </button>
           </div>
         </section>
       </div>
     </section>
   </main>
 
+  <template id="reportTemplate">
+  <section class="w-[794px] bg-white p-10 text-slate-900">
+    <div class="mb-8 border-b border-slate-200 pb-6">
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">NeuroScreen Doctor Report</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight">Voice Analysis Summary</h1>
+      <p class="mt-2 text-sm text-slate-600">Patient: <span id="reportUsername"></span></p>
+      <p class="mt-1 text-sm text-slate-600">Generated: <span id="reportDate"></span></p>
+    </div>
+
+    <div class="grid gap-6">
+      <div class="rounded-3xl bg-slate-50 p-6">
+        <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">Current Risk Score</p>
+        <div class="mt-4 flex items-center gap-6">
+          <img id="reportRiskImage" alt="Current risk chart" class="h-56 w-56 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200" />
+          <div>
+            <p id="reportScoreText" class="text-4xl font-semibold text-slate-900">--</p>
+            <p id="reportRiskText" class="mt-2 text-sm leading-6 text-slate-600"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-3xl bg-slate-50 p-6">
+        <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">History Trend</p>
+        <img id="reportHistoryImage" alt="History trend chart" class="mt-4 w-full rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200" />
+      </div>
+    </div>
+  </section>
+  </template>
+
   <script>
+    const currentUsername = {{ username | tojson }};
     const form = document.getElementById('voiceForm');
     const fileInput = document.getElementById('voiceFile');
+    const fileName = document.getElementById('fileName');
     const submitBtn = document.getElementById('submitBtn');
+    const buttonText = document.getElementById('buttonText');
+    const buttonSpinner = document.getElementById('buttonSpinner');
     const statusText = document.getElementById('statusText');
-    const resultsSection = document.getElementById('resultsSection');
-    const riskLabel = document.getElementById('riskLabel');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
     const riskDescription = document.getElementById('riskDescription');
-    const chartCanvas = document.getElementById('riskChart');
+    const currentScoreBadge = document.getElementById('currentScoreBadge');
 
-    let riskChart = new Chart(chartCanvas, {
+    const reportTemplate = document.getElementById('reportTemplate');
+    const reportUsername = document.getElementById('reportUsername');
+    const reportDate = document.getElementById('reportDate');
+    const reportRiskImage = document.getElementById('reportRiskImage');
+    const reportHistoryImage = document.getElementById('reportHistoryImage');
+    const reportScoreText = document.getElementById('reportScoreText');
+    const reportRiskText = document.getElementById('reportRiskText');
+
+    const riskCtx = document.getElementById('riskChart').getContext('2d');
+    const historyCtx = document.getElementById('historyChart').getContext('2d');
+
+    let currentRiskScore = null;
+    let historyChart = null;
+    let riskChart = new Chart(riskCtx, {
       type: 'doughnut',
       data: {
         labels: ['Risk Score', 'Remaining'],
@@ -103,13 +170,13 @@
           data: [0, 100],
           backgroundColor: ['#0ea5e9', '#dbeafe'],
           borderWidth: 0,
-          hoverOffset: 6,
+          hoverOffset: 8,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '76%',
+        cutout: '78%',
         plugins: {
           legend: { display: false },
           tooltip: { enabled: false }
@@ -121,32 +188,142 @@
       if (score < 34) {
         return {
           label: 'Low Risk',
-          description: 'The returned score falls in the lower range. Continue routine monitoring and follow professional guidance if symptoms persist.'
+          description: 'The model returned a lower screening score. Continue routine monitoring and review any ongoing symptoms with a clinician if needed.'
         };
       }
 
       if (score < 67) {
         return {
           label: 'Moderate Risk',
-          description: 'This score suggests a mid-range signal from the model. Consider repeating the test or reviewing the result with a clinician.'
+          description: 'This result is in the mid-range. Repeating the test or discussing the result with a healthcare professional may be helpful.'
         };
       }
 
       return {
         label: 'High Risk',
-        description: 'The score is elevated. A professional medical assessment is recommended to interpret the result properly.'
+        description: 'The screening score is elevated. A professional medical assessment is recommended for proper interpretation.'
       };
     }
 
-    function updateChart(score) {
+    function updateRiskChart(score) {
       const safeScore = Math.max(0, Math.min(100, Number(score) || 0));
+      currentRiskScore = safeScore;
       riskChart.data.datasets[0].data = [safeScore, 100 - safeScore];
       riskChart.data.datasets[0].backgroundColor = [
         safeScore < 34 ? '#0ea5e9' : safeScore < 67 ? '#f59e0b' : '#ef4444',
         '#dbeafe'
       ];
       riskChart.update();
+
+      const classification = classifyRisk(safeScore);
+      currentScoreBadge.textContent = `${safeScore}/100`;
+      riskDescription.textContent = `${classification.label}. ${classification.description}`;
     }
+
+    function formatDateLabel(timestamp) {
+      const date = new Date(timestamp);
+      if (Number.isNaN(date.getTime())) {
+        return timestamp;
+      }
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    async function loadHistory() {
+      try {
+        const response = await fetch('/api/history');
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message || 'Unable to load history.');
+        }
+
+        const labels = payload.history.map((item) => formatDateLabel(item.timestamp));
+        const values = payload.history.map((item) => Number(item.risk_score) || 0);
+
+        if (historyChart) {
+          historyChart.destroy();
+        }
+
+        historyChart = new Chart(historyCtx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Risk Score',
+              data: values,
+              borderColor: '#0284c7',
+              backgroundColor: 'rgba(14, 165, 233, 0.14)',
+              tension: 0.35,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#0ea5e9',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: { color: '#64748b' },
+                grid: { color: 'rgba(148, 163, 184, 0.18)' }
+              },
+              x: {
+                ticks: { color: '#64748b' },
+                grid: { display: false }
+              }
+            },
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: '#334155' }
+              }
+            }
+          }
+        });
+
+        if (values.length > 0) {
+          updateRiskChart(values[values.length - 1]);
+        }
+      } catch (error) {
+        statusText.textContent = error.message || 'Unable to load patient history.';
+      }
+    }
+
+    function setLoadingState(isLoading) {
+      submitBtn.disabled = isLoading;
+      buttonSpinner.classList.toggle('hidden', !isLoading);
+      buttonText.textContent = isLoading ? 'Processing...' : 'Analyze';
+    }
+
+    function syncFileName() {
+      fileName.textContent = fileInput.files[0] ? fileInput.files[0].name : 'No file selected';
+    }
+
+    fileInput.addEventListener('change', syncFileName);
+
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropZone.classList.add('border-sky-400', 'bg-sky-50');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('border-sky-400', 'bg-sky-50');
+    });
+
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('border-sky-400', 'bg-sky-50');
+      if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+        fileInput.files = event.dataTransfer.files;
+        syncFileName();
+      }
+    });
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -160,8 +337,7 @@
       const formData = new FormData();
       formData.append('file', file);
 
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Processing...';
+      setLoadingState(true);
       statusText.textContent = 'Uploading and analyzing voice sample...';
 
       try {
@@ -176,21 +352,101 @@
           throw new Error(payload.message || 'Voice analysis failed.');
         }
 
-        const score = Number(payload.risk_score) || 0;
-        const classification = classifyRisk(score);
-
-        updateChart(score);
-        riskLabel.textContent = `${score}/100`;
-        riskDescription.textContent = `${classification.label}. ${classification.description}`;
-        resultsSection.classList.remove('hidden');
+        updateRiskChart(payload.risk_score);
         statusText.textContent = payload.message || 'Analysis completed successfully.';
+        await loadHistory();
       } catch (error) {
         statusText.textContent = error.message || 'Unable to analyze the uploaded file.';
       } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Analyze Voice';
+        setLoadingState(false);
       }
     });
+
+    function buildReportDetails() {
+      const score = currentRiskScore ?? 0;
+      const classification = classifyRisk(score);
+      reportUsername.textContent = currentUsername;
+      reportDate.textContent = new Date().toLocaleString();
+      reportScoreText.textContent = `${score}/100`;
+      reportRiskText.textContent = `${classification.label}. ${classification.description}`;
+      reportRiskImage.src = riskChart.toBase64Image('image/png', 1);
+      reportHistoryImage.src = historyChart ? historyChart.toBase64Image('image/png', 1) : '';
+    }
+
+    function waitForImageLoad(imageElement) {
+      return new Promise((resolve) => {
+        if (!imageElement.src) {
+          resolve();
+          return;
+        }
+
+        if (imageElement.complete && imageElement.naturalWidth > 0) {
+          resolve();
+          return;
+        }
+
+        imageElement.onload = () => resolve();
+        imageElement.onerror = () => resolve();
+      });
+    }
+
+    downloadPdfBtn.addEventListener('click', async () => {
+      if (!historyChart) {
+        statusText.textContent = 'Load the dashboard history before downloading the report.';
+        return;
+      }
+
+      buildReportDetails();
+
+      const tempContainer = document.createElement('div');
+      tempContainer.setAttribute('aria-hidden', 'true');
+      tempContainer.style.position = 'fixed';
+      tempContainer.style.left = '0';
+      tempContainer.style.top = '0';
+      tempContainer.style.width = '794px';
+      tempContainer.style.background = '#ffffff';
+      tempContainer.style.zIndex = '-1';
+      tempContainer.style.pointerEvents = 'none';
+
+      const reportNode = reportTemplate.content.firstElementChild.cloneNode(true);
+      tempContainer.appendChild(reportNode);
+      document.body.appendChild(tempContainer);
+
+      const clonedUsername = tempContainer.querySelector('#reportUsername');
+      const clonedDate = tempContainer.querySelector('#reportDate');
+      const clonedRiskImage = tempContainer.querySelector('#reportRiskImage');
+      const clonedHistoryImage = tempContainer.querySelector('#reportHistoryImage');
+      const clonedScoreText = tempContainer.querySelector('#reportScoreText');
+      const clonedRiskText = tempContainer.querySelector('#reportRiskText');
+
+      clonedUsername.textContent = currentUsername;
+      clonedDate.textContent = new Date().toLocaleString();
+      clonedScoreText.textContent = `${currentRiskScore ?? 0}/100`;
+      clonedRiskText.textContent = reportRiskText.textContent;
+      clonedRiskImage.src = riskChart.toBase64Image('image/png', 1);
+      clonedHistoryImage.src = historyChart ? historyChart.toBase64Image('image/png', 1) : '';
+
+      await Promise.all([
+        waitForImageLoad(clonedRiskImage),
+        waitForImageLoad(clonedHistoryImage),
+      ]);
+
+      const options = {
+        margin: 10,
+        filename: `NeuroScreen_Report_${currentUsername}_${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      try {
+        await html2pdf().set(options).from(tempContainer).save();
+      } finally {
+        tempContainer.remove();
+      }
+    });
+
+    loadHistory();
   </script>
 </body>
 </html>
