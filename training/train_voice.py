@@ -33,18 +33,20 @@ from sklearn.calibration import CalibratedClassifierCV
 DATA_DIR = "datasets/voice"
 
 
-def extract_jitter_shimmer(file_path):
+def extract_features(file_path):
     """
-    Extracts Mean Jitter (local) and Mean Shimmer (local) using librosa.
+    Extracts Mean Jitter, Mean Shimmer, Pitch STD, ZCR, and first 3 MFCCs using librosa.
+    Safely handles empty arrays and division by zero.
     """
     try:
         # Load the audio file. sr=None preserves the original sample rate.
         y, sr = librosa.load(file_path, sr=None)
 
+        # Handle empty audio files safely
+        if len(y) == 0:
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
         # 1. Extract Fundamental Frequency (F0) using Probabilistic YIN (pYIN)
-        # pYIN is highly accurate for voice. It returns F0, a boolean array
-        # of voiced frames, and voiced probabilities.
-        # fmin=50 and fmax=300 Hz covers the typical human vocal pitch range.
         f0, voiced_flag, _ = librosa.pyin(
             y, fmin=50, fmax=300, sr=sr, frame_length=2048, hop_length=512
         )
@@ -63,12 +65,10 @@ def extract_jitter_shimmer(file_path):
         rms_voiced = rms[voiced_flag]
 
         # --- Calculate Mean Jitter (local) ---
-        # Jitter is the variation in pitch periods (Time = 1 / Frequency)
         if len(f0_voiced) > 1:
             periods = 1.0 / f0_voiced
             mean_period = np.mean(periods)
             if mean_period > 0:
-                # Mean absolute difference of consecutive periods / mean period
                 jitter = np.mean(np.abs(np.diff(periods))) / mean_period
             else:
                 jitter = 0.0
@@ -76,22 +76,37 @@ def extract_jitter_shimmer(file_path):
             jitter = 0.0
 
         # --- Calculate Mean Shimmer (local) ---
-        # Shimmer is the variation in amplitude (loudness)
         if len(rms_voiced) > 1:
             mean_rms = np.mean(rms_voiced)
             if mean_rms > 0:
-                # Mean absolute difference of consecutive amplitudes / mean amplitude
                 shimmer = np.mean(np.abs(np.diff(rms_voiced))) / mean_rms
             else:
                 shimmer = 0.0
         else:
             shimmer = 0.0
 
-        return jitter, shimmer
+        # --- Calculate Pitch Variability (Standard Deviation of F0) ---
+        if len(f0_voiced) > 0:
+            pitch_std = np.std(f0_voiced)
+        else:
+            pitch_std = 0.0
+
+        # --- Calculate Zero Crossing Rate (ZCR) ---
+        zcr = np.mean(librosa.feature.zero_crossing_rate(y))
+
+        # --- Calculate MFCCs (Mean of the first 3 coefficients) ---
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=3)
+        mfcc_means = np.mean(mfccs, axis=1)
+        
+        mfcc1 = mfcc_means[0] if len(mfcc_means) > 0 else 0.0
+        mfcc2 = mfcc_means[1] if len(mfcc_means) > 1 else 0.0
+        mfcc3 = mfcc_means[2] if len(mfcc_means) > 2 else 0.0
+
+        return jitter, shimmer, pitch_std, zcr, mfcc1, mfcc2, mfcc3
 
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
-        return None, None
+        return None, None, None, None, None, None, None
 
 
 def build_dataset(data_dir):
@@ -106,20 +121,21 @@ def build_dataset(data_dir):
 
     print("Processing 'Healthy' audio files...")
     for file_path in glob.glob(healthy_dir):
-        jitter, shimmer = extract_jitter_shimmer(file_path)
-        if jitter is not None and shimmer is not None:
-            features.append([jitter, shimmer])
+        extracted = extract_features(file_path)
+        if extracted[0] is not None:
+            features.append(extracted)
             labels.append(0)  # 0 = Healthy
 
     print("Processing 'Parkinson's' audio files...")
     for file_path in glob.glob(parkinsons_dir):
-        jitter, shimmer = extract_jitter_shimmer(file_path)
-        if jitter is not None and shimmer is not None:
-            features.append([jitter, shimmer])
+        extracted = extract_features(file_path)
+        if extracted[0] is not None:
+            features.append(extracted)
             labels.append(1)  # 1 = Parkinson's
 
-    # Create the Pandas DataFrame
-    df = pd.DataFrame(features, columns=["Jitter", "Shimmer"])
+    # Create the Pandas DataFrame with the new feature columns
+    columns = ["Jitter", "Shimmer", "Pitch_STD", "ZCR", "MFCC_1", "MFCC_2", "MFCC_3"]
+    df = pd.DataFrame(features, columns=columns)
     df["Label"] = labels
 
     return df
@@ -150,7 +166,7 @@ def main():
     print(df.head())
 
     # 3. Prepare data for training
-    X = df[["Jitter", "Shimmer"]]
+    X = df[["Jitter", "Shimmer", "Pitch_STD", "ZCR", "MFCC_1", "MFCC_2", "MFCC_3"]]
     y = df["Label"]
 
     # Split into training and testing sets (80% train, 20% test)
@@ -169,7 +185,7 @@ def main():
     calibrated_svc = CalibratedClassifierCV(estimator=base_svc, ensemble=False, cv=5)
 
     # Wrap the scaler and the calibrated model in a Pipeline.
-    # StandardScaler normalizes the raw acoustic features (Jitter/Shimmer) before classification.
+    # StandardScaler normalizes the raw acoustic features before classification.
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
         ('classifier', calibrated_svc)
