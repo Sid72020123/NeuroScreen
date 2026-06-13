@@ -7,29 +7,27 @@ import librosa
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # =====================================================================
 # 📁 FOLDER STRUCTURE INSTRUCTIONS
 # =====================================================================
-# To use this script, organize your .wav audio files into two folders
-# based on their class (Healthy vs. Parkinson's).
+# Your folder structure is set up perfectly! It looks like this:
 #
-# Create a main directory named "data" in the exact same folder as
-# this script. Inside "data", create "healthy" and "parkinsons".
-#
-# Your folder structure MUST look exactly like this:
-#
-# project_folder/
+# training/
 #  ├── train_voice.py                <-- This script
-#  └── data/                         <-- The main dataset folder
-#       ├── healthy/                 <-- Label 0
-#       │    ├── healthy_1.wav
-#       │    ├── healthy_2.wav
-#       │    └── ...
-#       └── parkinsons/              <-- Label 1
-#            ├── parkinsons_1.wav
-#            ├── parkinsons_2.wav
-#            └── ...
+#  └── datasets/
+#       └── voice/                   <-- The main dataset folder (DATA_DIR)
+#            ├── healthy/            <-- Label 0
+#            │    ├── AH_064F_...wav
+#            │    ├── AH_114S_...wav
+#            │    └── ...
+#            └── parkinsons/         <-- Label 1
+#                 ├── AH_5456...wav
+#                 ├── AH_5456...wav
+#                 └── ...
 # =====================================================================
 
 DATA_DIR = "datasets/voice"
@@ -156,20 +154,32 @@ def main():
     y = df["Label"]
 
     # Split into training and testing sets (80% train, 20% test)
-    # Note: If you are testing with a tiny dataset (< 5 files), remove 'stratify=y'
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # 4. Train the Support Vector Classifier (SVC)
+    # 4. Train the Support Vector Classifier (SVC) using a Pipeline
     print("\nTraining the Support Vector Classifier (SVC)...")
 
-    # probability=True is required so we can predict confidence percentages later
-    model = SVC(kernel="linear", probability=True, random_state=42)
-    model.fit(X_train, y_train)
+    # Upgrade to RBF kernel to capture complex, non-linear patterns.
+    base_svc = SVC(kernel="rbf", random_state=42)
+
+    # Use CalibratedClassifierCV to extract prediction probabilities for the 0-100 Risk Score.
+    # ensemble=False is used as recommended by the scikit-learn warning.
+    calibrated_svc = CalibratedClassifierCV(estimator=base_svc, ensemble=False, cv=5)
+
+    # Wrap the scaler and the calibrated model in a Pipeline.
+    # StandardScaler normalizes the raw acoustic features (Jitter/Shimmer) before classification.
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('classifier', calibrated_svc)
+    ])
+
+    # Train the entire pipeline
+    pipeline.fit(X_train, y_train)
 
     # Evaluate the model
-    y_pred = model.predict(X_test)
+    y_pred = pipeline.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
     print(f"🎯 Model Accuracy on Test Set: {acc * 100:.2f}%")
     print("\nClassification Report:")
@@ -179,14 +189,14 @@ def main():
         )
     )
 
-    # 5. Save the trained model
+    # 5. Save the trained pipeline
     model_filename = "voice_model.pkl"
     with open(model_filename, "wb") as file:
-        pickle.dump(model, file)
+        pickle.dump(pipeline, file)
 
-    print(f"\n💾 Success! The trained model has been saved as '{model_filename}'.")
+    print(f"\n💾 Success! The trained pipeline has been saved as '{model_filename}'.")
     print(
-        "You can now load this .pkl file in a separate script to make predictions on new voices!"
+        "You can now load this .pkl file in your Flask app to make predictions!"
     )
 
 
