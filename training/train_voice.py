@@ -5,11 +5,8 @@ import numpy as np
 import pandas as pd
 import librosa
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.calibration import CalibratedClassifierCV
 
 # =====================================================================
 # 📁 FOLDER STRUCTURE INSTRUCTIONS
@@ -97,7 +94,7 @@ def extract_features(file_path):
         # --- Calculate MFCCs (Mean of the first 3 coefficients) ---
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=3)
         mfcc_means = np.mean(mfccs, axis=1)
-        
+
         mfcc1 = mfcc_means[0] if len(mfcc_means) > 0 else 0.0
         mfcc2 = mfcc_means[1] if len(mfcc_means) > 1 else 0.0
         mfcc3 = mfcc_means[2] if len(mfcc_means) > 2 else 0.0
@@ -166,7 +163,16 @@ def main():
     print(df.head())
 
     # 3. Prepare data for training
-    X = df[["Jitter", "Shimmer", "Pitch_STD", "ZCR", "MFCC_1", "MFCC_2", "MFCC_3"]]
+    feature_columns = [
+        "Jitter",
+        "Shimmer",
+        "Pitch_STD",
+        "ZCR",
+        "MFCC_1",
+        "MFCC_2",
+        "MFCC_3",
+    ]
+    X = df[feature_columns]
     y = df["Label"]
 
     # Split into training and testing sets (80% train, 20% test)
@@ -174,28 +180,13 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # 4. Train the Support Vector Classifier (SVC) using a Pipeline
-    print("\nTraining the Support Vector Classifier (SVC)...")
-
-    # Upgrade to RBF kernel to capture complex, non-linear patterns.
-    base_svc = SVC(kernel="rbf", random_state=42)
-
-    # Use CalibratedClassifierCV to extract prediction probabilities for the 0-100 Risk Score.
-    # ensemble=False is used as recommended by the scikit-learn warning.
-    calibrated_svc = CalibratedClassifierCV(estimator=base_svc, ensemble=False, cv=5)
-
-    # Wrap the scaler and the calibrated model in a Pipeline.
-    # StandardScaler normalizes the raw acoustic features before classification.
-    pipeline = Pipeline([
-        ('scaler', StandardScaler()),
-        ('classifier', calibrated_svc)
-    ])
-
-    # Train the entire pipeline
-    pipeline.fit(X_train, y_train)
+    # 4. Train the Random Forest Classifier
+    print("\nTraining the Random Forest Classifier...")
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
 
     # Evaluate the model
-    y_pred = pipeline.predict(X_test)
+    y_pred = model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
     print(f"🎯 Model Accuracy on Test Set: {acc * 100:.2f}%")
     print("\nClassification Report:")
@@ -205,15 +196,19 @@ def main():
         )
     )
 
-    # 5. Save the trained pipeline
+    # Print Feature Importances
+    print("\n📊 Feature Importances:")
+    importances = model.feature_importances_
+    for name, importance in zip(feature_columns, importances):
+        print(f"  - {name}: {importance * 100:.2f}%")
+
+    # 5. Save the trained model
     model_filename = "voice_model.pkl"
     with open(model_filename, "wb") as file:
-        pickle.dump(pipeline, file)
+        pickle.dump(model, file)
 
-    print(f"\n💾 Success! The trained pipeline has been saved as '{model_filename}'.")
-    print(
-        "You can now load this .pkl file in your Flask app to make predictions!"
-    )
+    print(f"\n💾 Success! The trained model has been saved as '{model_filename}'.")
+    print("You can now load this .pkl file in your Flask app to make predictions!")
 
 
 if __name__ == "__main__":
