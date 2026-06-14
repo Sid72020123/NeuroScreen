@@ -203,7 +203,7 @@ def main():
         print(f"  - {name}: {importance * 100:.2f}%")
 
     # 5. Save the trained model
-    model_filename = "voice_model.pkl"
+    model_filename = "saved_models/voice_model.pkl"
     with open(model_filename, "wb") as file:
         pickle.dump(model, file)
 
