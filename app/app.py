@@ -897,13 +897,17 @@ def upload_spiral(session_id):
             # Assume it's already grayscale.
             img_gray = img_raw
 
-        # 3. Apply Adaptive Thresholding to get a pure black-on-white binary image.
-        # This is CRITICAL to match the model's training data.
-        binary_img = cv2.adaptiveThreshold(
-            img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        # 3. Apply a slight Gaussian Blur to remove pixel noise before thresholding.
+        blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
+
+        # 4. Use Otsu's Binarization to separate ink from background.
+        # This is more robust against noise amplification ("salt & pepper" static)
+        # than adaptive thresholding for this use case.
+        _, binary_img = cv2.threshold(
+            blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
         )
 
-        # 4. Crop tightly around the drawing to remove excess whitespace.
+        # 5. Crop tightly around the drawing to remove excess whitespace.
         # We find contours on the inverted image (white drawing on black background).
         contours, _ = cv2.findContours(
             cv2.bitwise_not(binary_img), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -931,15 +935,15 @@ def upload_spiral(session_id):
             if y_max > y_min and x_max > x_min:
                 cropped_binary_img = binary_img[y_min:y_max, x_min:x_max]
 
-        # 5. Resize to (224, 224) for the model input.
+        # 6. Resize to (224, 224) for the model input.
         resized_img = cv2.resize(
             cropped_binary_img, (224, 224), interpolation=cv2.INTER_AREA
         )
 
-        # 6. Convert grayscale binary image back to 3-channel for MobileNetV2.
+        # 7. Convert grayscale binary image back to 3-channel for MobileNetV2.
         model_input_img = cv2.cvtColor(resized_img, cv2.COLOR_GRAY2RGB)
 
-        # 7. Expand dimensions and apply MobileNetV2 preprocessing.
+        # 8. Expand dimensions and apply MobileNetV2 preprocessing.
         img_expanded = np.expand_dims(model_input_img, axis=0)
         processed_img = tf.keras.applications.mobilenet_v2.preprocess_input(
             img_expanded.astype(np.float32)
