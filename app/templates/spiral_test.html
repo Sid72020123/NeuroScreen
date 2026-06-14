@@ -4,7 +4,7 @@
     <div class="pb-6 border-b border-slate-200 mb-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h1 class="text-3xl font-bold text-slate-900">Motor Kinematics Test</h1>
+                <h1 class="text-3xl font-bold text-slate-900">Motor Kinematics</h1>
                 <p class="mt-1 text-slate-500">Session ID: {{ session_record.id }}</p>
             </div>
             <div class="mt-4 sm:mt-0">
@@ -18,31 +18,242 @@
     </div>
 
     <!-- Main Content -->
-    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200 text-center">
-        <h2 class="text-xl font-semibold text-slate-800">Spiral Drawing Area</h2>
-        <p class="text-slate-500 mt-1 mb-6">
-            Using your mouse or trackpad, please draw a continuous spiral in the white box below.
+    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+        <p class="text-center text-slate-600 mb-6">
+            Please draw a continuous spiral starting from the center and moving outward, or upload an image of a drawn
+            spiral.
         </p>
 
-        <!-- Placeholder for the drawing canvas -->
-        <div class="flex justify-center">
-            <!-- The canvas itself is the white square. The border is applied directly. -->
-            <canvas
-                id="spiral-canvas"
-                width="500"
-                height="500"
-                class="bg-white border border-slate-300 rounded-xl cursor-crosshair"></canvas>
-            <!-- A script would be needed to handle drawing on this canvas -->
+        <!-- Tab Navigation -->
+        <div class="border-b border-slate-200">
+            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                <button
+                    id="draw-tab-btn"
+                    class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-teal-600 border-teal-500"
+                    data-tab="draw-tab">
+                    Draw in Browser
+                </button>
+                <button
+                    id="upload-tab-btn"
+                    class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300"
+                    data-tab="upload-tab">
+                    Upload Image
+                </button>
+            </nav>
         </div>
 
+        <!-- Tab Content -->
         <div class="mt-8">
-            <button
-                type="button"
-                disabled
-                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-xl shadow-sm text-slate-500 bg-slate-200 cursor-not-allowed">
-                Analyze Drawing (Module in Development)
-            </button>
+            <!-- Draw Tab Content -->
+            <div id="draw-tab" class="tab-content text-center">
+                <div class="flex justify-center">
+                    <canvas
+                        id="spiral-canvas"
+                        width="400"
+                        height="400"
+                        class="bg-white border border-slate-300 rounded-xl cursor-crosshair"></canvas>
+                </div>
+                <div class="mt-6 flex justify-center space-x-4">
+                    <button
+                        id="clear-drawing-btn"
+                        type="button"
+                        class="inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-lg shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                        Clear Drawing
+                    </button>
+                    <button
+                        id="analyze-drawing-btn"
+                        type="button"
+                        class="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                        Analyze Drawing
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Tab Content -->
+            <div id="upload-tab" class="tab-content hidden text-center">
+                <form
+                    action="{{ url_for('upload_spiral', session_id=session_record.id) }}"
+                    method="POST"
+                    enctype="multipart/form-data">
+                    <div
+                        class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl">
+                        <div class="space-y-1 text-center">
+                            <svg
+                                class="mx-auto h-12 w-12 text-slate-400"
+                                stroke="currentColor"
+                                fill="none"
+                                viewBox="0 0 48 48"
+                                aria-hidden="true">
+                                <path
+                                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                            <div class="flex text-sm text-slate-600">
+                                <label
+                                    for="file-upload"
+                                    class="relative cursor-pointer bg-white rounded-md font-medium text-teal-600 hover:text-teal-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-teal-500">
+                                    <span>Upload a file</span>
+                                    <input
+                                        id="file-upload"
+                                        name="image"
+                                        type="file"
+                                        class="sr-only"
+                                        accept=".png,.jpg,.jpeg" />
+                                </label>
+                                <p class="pl-1">or drag and drop</p>
+                            </div>
+                            <p class="text-xs text-slate-500">PNG, JPG, JPEG up to 10MB</p>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                            Analyze Uploaded Image
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Tab switching logic
+        const tabButtons = document.querySelectorAll(".tab-btn");
+        const tabContents = document.querySelectorAll(".tab-content");
+
+        tabButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                // Update button styles
+                tabButtons.forEach((btn) => {
+                    btn.classList.remove("text-teal-600", "border-teal-500");
+                    btn.classList.add(
+                        "text-slate-500",
+                        "border-transparent",
+                        "hover:text-slate-700",
+                        "hover:border-slate-300",
+                    );
+                });
+                button.classList.add("text-teal-600", "border-teal-500");
+                button.classList.remove(
+                    "text-slate-500",
+                    "border-transparent",
+                    "hover:text-slate-700",
+                    "hover:border-slate-300",
+                );
+
+                // Show/hide tab content
+                const targetTabId = button.getAttribute("data-tab");
+                tabContents.forEach((content) => {
+                    if (content.id === targetTabId) {
+                        content.classList.remove("hidden");
+                    } else {
+                        content.classList.add("hidden");
+                    }
+                });
+            });
+        });
+
+        // Canvas drawing logic
+        const canvas = document.getElementById("spiral-canvas");
+        const ctx = canvas.getContext("2d");
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        // Set drawing style
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 4; // A thick stroke
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        function getEventPosition(event) {
+            const rect = canvas.getBoundingClientRect();
+            if (event.touches && event.touches.length > 0) {
+                return {
+                    x: event.touches[0].clientX - rect.left,
+                    y: event.touches[0].clientY - rect.top,
+                };
+            }
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top,
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const pos = getEventPosition(e);
+            [lastX, lastY] = [pos.x, pos.y];
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault(); // prevent scrolling on touch
+            const pos = getEventPosition(e);
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            [lastX, lastY] = [pos.x, pos.y];
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Mouse events
+        canvas.addEventListener("mousedown", startDrawing);
+        canvas.addEventListener("mousemove", draw);
+        canvas.addEventListener("mouseup", stopDrawing);
+        canvas.addEventListener("mouseout", stopDrawing);
+
+        // Touch events
+        canvas.addEventListener("touchstart", startDrawing);
+        canvas.addEventListener("touchmove", draw);
+        canvas.addEventListener("touchend", stopDrawing);
+
+        // Button actions
+        const clearBtn = document.getElementById("clear-drawing-btn");
+        clearBtn.addEventListener("click", () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        const analyzeBtn = document.getElementById("analyze-drawing-btn");
+        analyzeBtn.addEventListener("click", () => {
+            const dataURL = canvas.toDataURL("image/png");
+            const formData = new FormData();
+            formData.append("canvas_data", dataURL);
+
+            // Show a loading indicator
+            analyzeBtn.textContent = "Analyzing...";
+            analyzeBtn.disabled = true;
+
+            fetch("{{ url_for('upload_spiral', session_id=session_record.id) }}", {
+                method: "POST",
+                body: formData,
+            })
+                .then((response) => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else {
+                        // Handle errors if the server returns a non-redirect response
+                        console.error("Analysis failed.");
+                        analyzeBtn.textContent = "Analyze Drawing";
+                        analyzeBtn.disabled = false;
+                        // You could also show a flash message here by parsing a JSON error response
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error:", error);
+                    analyzeBtn.textContent = "Analyze Drawing";
+                    analyzeBtn.disabled = false;
+                });
+        });
+    });
+</script>
 {% endblock %}

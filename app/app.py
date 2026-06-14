@@ -4,7 +4,10 @@ from datetime import datetime
 from io import BytesIO
 
 from zoneinfo import ZoneInfo
+import base64
+import cv2
 import librosa
+import tensorflow as tf
 import numpy as np
 import pandas as pd
 from flask import (
@@ -42,6 +45,7 @@ from config import Config
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 SAVED_MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
+SPIRAL_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "spiral_model.h5")
 VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "voice_model.pkl")
 ALLOWED_AUDIO_EXTENSIONS = {"wav"}
 VOICE_FEATURE_COLUMNS = [
@@ -168,6 +172,23 @@ def get_voice_model():
     if _VOICE_MODEL is None:
         _VOICE_MODEL = load_voice_model()
     return _VOICE_MODEL
+
+
+_SPIRAL_MODEL = None
+
+
+def get_spiral_model():
+    global _SPIRAL_MODEL
+    if _SPIRAL_MODEL is None:
+        if os.path.exists(SPIRAL_MODEL_PATH):
+            try:
+                _SPIRAL_MODEL = tf.keras.models.load_model(SPIRAL_MODEL_PATH)
+                print(f"Successfully loaded spiral model from {SPIRAL_MODEL_PATH}")
+            except Exception as e:
+                print(f"Error loading spiral model: {e}")
+        else:
+            print(f"Warning: Spiral model not found at {SPIRAL_MODEL_PATH}")
+    return _SPIRAL_MODEL
 
 
 def extract_voice_features(file_path):
@@ -726,6 +747,118 @@ def upload_voice():
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+@app.route("/upload_spiral/<int:session_id>", methods=["POST"])
+@login_required
+def upload_spiral(session_id):
+    session_record = resolve_session(session_id)
+    if session_record is None:
+        flash("That screening session could not be found.", "danger")
+        return redirect(url_for("dashboard"))
+
+    model = get_spiral_model()
+    if model is None:
+        flash("Spiral analysis model is not available. Please check server logs.", "error")
+        return redirect(url_for("session_hub", session_id=session_id))
+
+    img_bytes = None
+
+    # Case 1: Handle base64 encoded string from canvas
+    if "canvas_data" in request.form and request.form.get("canvas_data"):
+        base64_data = request.form.get("canvas_data")
+        try:
+            # Strip the "data:image/png;base64," header
+            header, encoded = base64_data.split(",", 1)
+            img_bytes = base64.b64decode(encoded)
+        except (ValueError, TypeError) as e:
+            flash(f"Invalid canvas data received: {e}", "error")
+            return redirect(url_for("spiral_test", session_id=session_id))
+
+    # Case 2: Handle uploaded file
+    elif "image" in request.files:
+        file = request.files["image"]
+        if file and file.filename != "":
+            img_bytes = file.read()
+
+    if img_bytes is None:
+        flash("No image data received. Please draw a spiral or upload a file.", "error")
+        return redirect(url_for("spiral_test", session_id=session_id))
+
+    try:
+        # --- Preprocessing Pipeline (MUST MATCH TRAINING SCRIPT) ---
+        # 1. Decode image bytes into an OpenCV array
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        # Use IMREAD_UNCHANGED to handle PNGs with alpha channels from canvas
+        img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+
+        # If image has an alpha channel (like from canvas), blend it onto a white background
+        if len(img.shape) > 2 and img.shape[2] == 4:
+            alpha_channel = img[:, :, 3]
+            rgb_channels = img[:, :, :3]
+            white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
+            alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
+            img = (rgb_channels * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
+
+        # 2. Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # 3. Apply Adaptive Thresholding (matching train_spiral.py)
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+
+        # 4. Crop tightly around the drawing (matching train_spiral.py)
+        # This is crucial for uploaded images with extra whitespace.
+        inv_thresh = cv2.bitwise_not(thresh)
+        contours, _ = cv2.findContours(inv_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        cropped = thresh  # Default to the uncropped thresholded image
+        if contours:
+            x_min, y_min, x_max, y_max = gray.shape[1], gray.shape[0], 0, 0
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                x_min, y_min = min(x_min, x), min(y_min, y)
+                x_max, y_max = max(x_max, x + w), max(y_max, y + h)
+            
+            pad = 10  # Add padding to avoid cutting edges
+            x_min, y_min = max(0, x_min - pad), max(0, y_min - pad)
+            x_max, y_max = min(gray.shape[1], x_max + pad), min(gray.shape[0], y_max + pad)
+            
+            if y_max > y_min and x_max > x_min:
+                cropped = thresh[y_min:y_max, x_min:x_max]
+
+        # 5. Resize to (224, 224)
+        resized = cv2.resize(cropped, (224, 224), interpolation=cv2.INTER_AREA)
+
+        # 6. Convert back to 3 channels for MobileNetV2
+        img_rgb = cv2.cvtColor(resized, cv2.COLOR_GRAY2RGB)
+
+        # 7. Expand dimensions and apply MobileNetV2 preprocessing
+        img_expanded = np.expand_dims(img_rgb, axis=0)
+        processed_img = tf.keras.applications.mobilenet_v2.preprocess_input(img_expanded.astype(np.float32))
+
+        # --- Prediction & Database Update ---
+        # The model predicts the probability of Parkinson's (class 1).
+        # A higher probability means a worse drawing.
+        # To get a "health" score, we take (1 - probability).
+        parkinsons_prob = model.predict(processed_img)[0][0]
+        health_prob = 1.0 - parkinsons_prob
+        spiral_score = round(health_prob * 100, 1)
+
+        session_record.spiral_score = spiral_score
+        update_final_score(session_record)
+        db.session.commit()
+
+        flash(f"Spiral drawing analyzed successfully! Score: {spiral_score:.1f}%", "success")
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"An error occurred during spiral analysis: {e}")
+        flash("An error occurred during image processing. Please try again.", "error")
+        return redirect(url_for("spiral_test", session_id=session_id))
+
+    return redirect(url_for("session_hub", session_id=session_id))
 
 
 @app.route("/history")
