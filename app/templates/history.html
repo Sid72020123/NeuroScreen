@@ -1,14 +1,34 @@
 {% extends 'base.html' %} {% block title %}Screening History - NeuroScreen{% endblock %} {% block content %}
 <div class="max-w-5xl mx-auto py-8 px-4">
     <div class="flex justify-between items-center mb-8">
-        <h1 class="text-3xl font-bold text-slate-900">Screening History</h1>
-        <a href="{{ url_for('dashboard') }}" class="text-sm font-medium text-teal-600 hover:text-teal-500"
-            >&larr; Back to Dashboard</a
-        >
+        <div>
+            <h1 class="text-3xl font-bold text-slate-900">Screening History</h1>
+            <p class="mt-1 text-slate-500">Review past session results and trends over time.</p>
+        </div>
+        <a
+            href="{{ url_for('dashboard') }}"
+            class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <svg
+                class="-ml-1 mr-2 h-5 w-5 text-slate-400"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true">
+                <path
+                    fill-rule="evenodd"
+                    d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                    clip-rule="evenodd" />
+            </svg>
+            Dashboard
+        </a>
     </div>
 
     {% if sessions %}
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-slate-200">
+        <h3 class="text-lg font-semibold text-slate-800 mb-4">Final Score Trend</h3>
+        <canvas id="historyChart"></canvas>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200">
         <table class="min-w-full divide-y divide-slate-200">
             <thead class="bg-slate-50">
                 <tr>
@@ -43,12 +63,21 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                         {{ session.full_timestamp }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{{ session.voice_text }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{{ session.spiral_text }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        {% if session.voice_score is not none %}{{ session.voice_score }}%{% else %}Pending{% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        {% if session.spiral_score is not none %}{{ session.spiral_score }}%{% else %}Pending{% endif %}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
-                        {{ session.final_text }}
+                        {% if session.final_score is not none %}{{ session.final_score }}%{% else %}Pending{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <a
+                            href="{{ url_for('session_hub', session_id=session.id) }}"
+                            class="text-teal-600 hover:text-teal-800 mr-4"
+                            >View</a
+                        >
                         {% if session.final_score is not none %}
                         <a
                             href="/api/generate_report/?session_id={{ session.id }}"
@@ -56,11 +85,7 @@
                             >Download PDF</a
                         >
                         {% else %}
-                        <a
-                            href="{{ url_for('session_hub', session_id=session.id) }}"
-                            class="text-slate-500 hover:text-slate-700"
-                            >In Progress...</a
-                        >
+                        <span class="text-slate-400">In Progress</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -94,4 +119,53 @@
     </div>
     {% endif %}
 </div>
+{% endblock %} {% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const sessionsData = {{ sessions | tojson | safe }};
+        if (!sessionsData || sessionsData.length === 0) {
+            return;
+        }
+
+        const labels = [];
+        const data = [];
+
+        // Data from backend is newest to oldest, so we reverse it for the chart.
+        sessionsData.reverse().forEach(session => {
+            if (session.final_score !== null) {
+                labels.push(session.date);
+                data.push(session.final_score);
+            }
+        });
+
+        const ctx = document.getElementById("historyChart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "Final Risk Score",
+                        data: data,
+                        borderColor: "#0d9488", // teal-700
+                        backgroundColor: "rgba(13, 148, 136, 0.1)",
+                        fill: true,
+                        tension: 0.1,
+                        pointBackgroundColor: "#0d9488",
+                        pointRadius: 4,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                    },
+                },
+            },
+        });
+    });
+</script>
 {% endblock %}

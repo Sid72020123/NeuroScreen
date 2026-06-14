@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{% block title %}NeuroScreen{% endblock %}</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <link rel="preconnect" href="https://rsms.me/" />
         <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
@@ -18,61 +19,57 @@
             }
         </style>
     </head>
-    <body class="h-full font-sans flex flex-col">
-        <div class="min-h-full flex-grow">
-            <nav class="sticky top-0 z-40 bg-white/90 border-b border-slate-200 backdrop-blur-sm">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex items-center justify-between h-16">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0 font-bold text-teal-600">NeuroScreen</div>
-                            {% if current_user.is_authenticated %}
-                            <div class="hidden md:block">
-                                <div class="ml-10 flex items-baseline space-x-4">
-                                    <a
-                                        href="{{ url_for('dashboard') }}"
-                                        class="text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium"
-                                        >Dashboard</a
-                                    >
-                                    <a
-                                        href="{{ url_for('history') }}"
-                                        class="text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium"
-                                        >History</a
-                                    >
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
+    <body class="min-h-screen bg-slate-50 font-sans flex flex-col">
+        <nav class="sticky top-0 z-40 bg-white/90 border-b border-slate-200 backdrop-blur-sm shadow-md">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 font-bold text-teal-600">NeuroScreen</div>
                         {% if current_user.is_authenticated %}
                         <div class="hidden md:block">
-                            <div class="ml-4 flex items-center md:ml-6">
-                                <span class="text-slate-500 text-sm mr-4">Welcome, {{ current_user.username }}</span>
+                            <div class="ml-10 flex items-baseline space-x-2">
                                 <a
-                                    href="{{ url_for('logout') }}"
-                                    class="text-sm font-medium text-slate-600 hover:text-slate-900"
-                                    >Sign Out</a
+                                    href="{{ url_for('dashboard') }}"
+                                    class="text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                                    >Dashboard</a
+                                >
+                                <a
+                                    href="{{ url_for('history') }}"
+                                    class="text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                                    >History</a
                                 >
                             </div>
                         </div>
                         {% endif %}
                     </div>
-                </div>
-            </nav>
-
-            <main class="py-10">
-                {% with messages = get_flashed_messages(with_categories=true) %} {% if messages %}
-                <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 mb-4">
-                    {% for category, message in messages %}
-                    <div
-                        class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative"
-                        role="alert">
-                        <span class="block sm:inline">{{ message }}</span>
+                    {% if current_user.is_authenticated %}
+                    <div class="hidden md:block">
+                        <div class="ml-4 flex items-center md:ml-6">
+                            <span class="text-slate-500 text-sm mr-4">Welcome, {{ current_user.username }}</span>
+                            <a
+                                href="{{ url_for('logout') }}"
+                                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                                >Sign Out</a
+                            >
+                        </div>
                     </div>
-                    {% endfor %}
+                    {% endif %}
                 </div>
-                {% endif %} {% endwith %} {% block content %}{% endblock %}
-            </main>
-        </div>
-        <footer class="bg-slate-100 border-t border-slate-200">
+            </div>
+        </nav>
+
+        <main class="py-10">
+            {% with messages = get_flashed_messages(with_categories=true) %} {% if messages %}
+            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 mb-4">
+                {% for category, message in messages %}
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+                    <span class="block sm:inline">{{ message }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %} {% endwith %} {% block content %}{% endblock %}
+        </main>
+        <footer class="bg-slate-100 border-t border-slate-200 mt-auto">
             <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center text-sm text-slate-500">
                 &copy; {{ year }} NeuroScreen Clinical Systems. For research purposes only.
             </div>

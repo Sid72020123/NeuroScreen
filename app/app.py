@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from io import BytesIO
 
+from zoneinfo import ZoneInfo
 import librosa
 import numpy as np
 import pandas as pd
@@ -320,7 +321,11 @@ def format_score(value):
 def format_timestamp(timestamp_value):
     if timestamp_value is None:
         return ""
-    return timestamp_value.strftime("%Y-%m-%d %I:%M %p")
+    # Assume timestamp_value is a naive datetime in UTC from the database
+    utc_dt = timestamp_value.replace(tzinfo=ZoneInfo("UTC"))
+    # Convert to Indian Standard Time
+    ist_dt = utc_dt.astimezone(ZoneInfo("Asia/Kolkata"))
+    return ist_dt.strftime("%Y-%m-%d %I:%M %p")
 
 
 def get_score_classes(score):
