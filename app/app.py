@@ -64,6 +64,7 @@ VOICE_ANALYSIS_THRESHOLDS = {
 }
 
 os.makedirs(INSTANCE_DIR, exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR, "static", "uploads"), exist_ok=True)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -115,6 +116,7 @@ class ScreeningSession(db.Model):
     spiral_score = db.Column(db.Float, nullable=True)
     final_score = db.Column(db.Float, nullable=True)
     voice_metrics = db.Column(db.Text, nullable=True)
+    spiral_metrics = db.Column(db.Text, nullable=True)
 
 
 @login_manager.user_loader
@@ -129,10 +131,16 @@ def ensure_database_schema():
         columns = {
             column["name"] for column in inspector.get_columns("screening_sessions")
         }
-        if "voice_metrics" not in columns:
-            with db.engine.begin() as connection:
+        with db.engine.begin() as connection:
+            if "voice_metrics" not in columns:
                 connection.execute(
                     text("ALTER TABLE screening_sessions ADD COLUMN voice_metrics TEXT")
+                )
+            if "spiral_metrics" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE screening_sessions ADD COLUMN spiral_metrics TEXT"
+                    )
                 )
 
 
@@ -389,6 +397,13 @@ def serialize_session(session_record):
         except json.JSONDecodeError:
             voice_metrics = {}
 
+    spiral_metrics = {}
+    if session_record.spiral_metrics:
+        try:
+            spiral_metrics = json.loads(session_record.spiral_metrics)
+        except json.JSONDecodeError:
+            spiral_metrics = {}
+
     timestamp_text = format_timestamp(session_record.timestamp)
     voice_analysis = generate_clinical_analysis(voice_metrics) if voice_metrics else []
     return {
@@ -412,6 +427,8 @@ def serialize_session(session_record):
         "final_text": format_score(session_record.final_score),
         "voice_metrics": voice_metrics,
         "voice_analysis": voice_analysis,
+        "spiral_analysis": spiral_metrics.get("analysis", []),
+        "spiral_xai_image_url": spiral_metrics.get("xai_image_url"),
         "final_score_classes": get_score_classes(session_record.final_score),
         "voice_score_classes": get_score_classes(session_record.voice_score),
         "spiral_score_classes": get_score_classes(session_record.spiral_score),
@@ -442,7 +459,7 @@ def render_auth_page(template_name, **context):
 def build_report_pdf(session_record):
     session_data = serialize_session(session_record)
     features_dict = session_data["voice_metrics"]
-    analysis_points = generate_clinical_analysis(features_dict)
+    voice_analysis_points = generate_clinical_analysis(features_dict)
 
     pdf = FPDF(unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -515,19 +532,33 @@ def build_report_pdf(session_record):
     pdf.set_font("Helvetica", "B", 13)
     pdf.cell(0, 8, "Explainable AI Analysis", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    for point in analysis_points:
+    for point in voice_analysis_points:
         pdf.multi_cell(0, 6, f"- {point}", ln=1)
 
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 13)
     pdf.cell(0, 8, "Spiral Assessment", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    pdf.multi_cell(
-        0,
-        6,
-        "Spiral results are reserved for the drawing analysis workflow. This section is intentionally left available for future image-based scoring and clinician review.",
-        border=1,
-    )
+
+    spiral_analysis_points = session_data.get("spiral_analysis", [])
+    xai_image_url = session_data.get("spiral_xai_image_url")
+
+    if xai_image_url:
+        image_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
+        if os.path.exists(image_path):
+            pdf.image(image_path, w=page_width / 2, x=pdf.get_x() + page_width / 4)
+            pdf.ln(4)
+
+    if spiral_analysis_points:
+        for point in spiral_analysis_points:
+            pdf.multi_cell(0, 6, f"- {point}", ln=1)
+    else:
+        pdf.multi_cell(
+            0,
+            6,
+            "Spiral test was not completed for this session, or analysis is not available.",
+            border=1,
+        )
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "I", 9)
@@ -544,6 +575,60 @@ def build_report_pdf(session_record):
     buffer.write(pdf_bytes)
     buffer.seek(0)
     return buffer
+
+
+def generate_gradcam(
+    img_array, base_img, model, session_id, last_conv_layer_name="out_relu"
+):
+    grad_model = tf.keras.models.Model(
+        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+    )
+
+    with tf.GradientTape() as tape:
+        last_conv_layer_output, preds = grad_model(img_array)
+        class_output = preds[:, 0]
+
+    grads = tape.gradient(class_output, last_conv_layer_output)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    last_conv_layer_output = last_conv_layer_output[0]
+    heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
+    heatmap = tf.squeeze(heatmap)
+
+    heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+    heatmap = heatmap.numpy()
+
+    # --- OpenCV steps for visualization ---
+    heatmap_resized = cv2.resize(heatmap, (base_img.shape[1], base_img.shape[0]))
+
+    # Threshold the heatmap to get the "hot" regions
+    _, hot_region_thresh = cv2.threshold(
+        (heatmap_resized * 255).astype("uint8"), 200, 255, cv2.THRESH_BINARY
+    )
+    contours, _ = cv2.findContours(
+        hot_region_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    heatmap_jet = cv2.applyColorMap(
+        (heatmap_resized * 255).astype("uint8"), cv2.COLORMAP_JET
+    )
+
+    superimposed_img = cv2.addWeighted(base_img, 0.6, heatmap_jet, 0.4, 0)
+
+    if contours:
+        main_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(main_contour)
+        cv2.rectangle(
+            superimposed_img, (x, y), (x + w, y + h), (0, 0, 255), 2
+        )  # Red rectangle
+
+    # Save the annotated image
+    uploads_dir = os.path.join(BASE_DIR, "static", "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    save_path = os.path.join(uploads_dir, f"session_{session_id}_xai.jpg")
+    cv2.imwrite(save_path, superimposed_img)
+
+    return f"/static/uploads/session_{session_id}_xai.jpg"
 
 
 @app.route("/")
@@ -759,7 +844,9 @@ def upload_spiral(session_id):
 
     model = get_spiral_model()
     if model is None:
-        flash("Spiral analysis model is not available. Please check server logs.", "error")
+        flash(
+            "Spiral analysis model is not available. Please check server logs.", "error"
+        )
         return redirect(url_for("session_hub", session_id=session_id))
 
     img_bytes = None
@@ -786,71 +873,115 @@ def upload_spiral(session_id):
         return redirect(url_for("spiral_test", session_id=session_id))
 
     try:
-        # --- Preprocessing Pipeline (MUST MATCH TRAINING SCRIPT) ---
-        # 1. Decode image bytes into an OpenCV array
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        # Use IMREAD_UNCHANGED to handle PNGs with alpha channels from canvas
-        img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+        # --- Strict OpenCV Preprocessing Pipeline to fix Training-Serving Skew ---
 
-        # If image has an alpha channel (like from canvas), blend it onto a white background
-        if len(img.shape) > 2 and img.shape[2] == 4:
-            alpha_channel = img[:, :, 3]
-            rgb_channels = img[:, :, :3]
+        # 1. Decode image from bytes.
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img_raw = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+
+        # 2. Convert to grayscale, handling various input formats (RGBA, BGR, GRAY).
+        if len(img_raw.shape) > 2 and img_raw.shape[2] == 4:
+            # Handle RGBA from canvas: blend alpha onto a white background first.
+            alpha_channel = img_raw[:, :, 3]
+            rgb_channels = img_raw[:, :, :3]
             white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
             alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
-            img = (rgb_channels * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
+            blended_img = (
+                rgb_channels * alpha_factor + white_background * (1 - alpha_factor)
+            ).astype(np.uint8)
+            img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
+        elif len(img_raw.shape) == 3:
+            # Handle standard BGR images.
+            img_gray = cv2.cvtColor(img_raw, cv2.COLOR_BGR2GRAY)
+        else:
+            # Assume it's already grayscale.
+            img_gray = img_raw
 
-        # 2. Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # 3. Apply Adaptive Thresholding (matching train_spiral.py)
-        thresh = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        # 3. Apply Adaptive Thresholding to get a pure black-on-white binary image.
+        # This is CRITICAL to match the model's training data.
+        binary_img = cv2.adaptiveThreshold(
+            img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
         )
 
-        # 4. Crop tightly around the drawing (matching train_spiral.py)
-        # This is crucial for uploaded images with extra whitespace.
-        inv_thresh = cv2.bitwise_not(thresh)
-        contours, _ = cv2.findContours(inv_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        cropped = thresh  # Default to the uncropped thresholded image
+        # 4. Crop tightly around the drawing to remove excess whitespace.
+        # We find contours on the inverted image (white drawing on black background).
+        contours, _ = cv2.findContours(
+            cv2.bitwise_not(binary_img), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        cropped_binary_img = binary_img
         if contours:
-            x_min, y_min, x_max, y_max = gray.shape[1], gray.shape[0], 0, 0
+            x_min, y_min, x_max, y_max = (
+                binary_img.shape[1],
+                binary_img.shape[0],
+                0,
+                0,
+            )
             for contour in contours:
                 x, y, w, h = cv2.boundingRect(contour)
                 x_min, y_min = min(x_min, x), min(y_min, y)
                 x_max, y_max = max(x_max, x + w), max(y_max, y + h)
-            
-            pad = 10  # Add padding to avoid cutting edges
+
+            pad = 10
             x_min, y_min = max(0, x_min - pad), max(0, y_min - pad)
-            x_max, y_max = min(gray.shape[1], x_max + pad), min(gray.shape[0], y_max + pad)
-            
+            x_max, y_max = min(binary_img.shape[1], x_max + pad), min(
+                binary_img.shape[0], y_max + pad
+            )
+
             if y_max > y_min and x_max > x_min:
-                cropped = thresh[y_min:y_max, x_min:x_max]
+                cropped_binary_img = binary_img[y_min:y_max, x_min:x_max]
 
-        # 5. Resize to (224, 224)
-        resized = cv2.resize(cropped, (224, 224), interpolation=cv2.INTER_AREA)
+        # 5. Resize to (224, 224) for the model input.
+        resized_img = cv2.resize(
+            cropped_binary_img, (224, 224), interpolation=cv2.INTER_AREA
+        )
 
-        # 6. Convert back to 3 channels for MobileNetV2
-        img_rgb = cv2.cvtColor(resized, cv2.COLOR_GRAY2RGB)
+        # 6. Convert grayscale binary image back to 3-channel for MobileNetV2.
+        model_input_img = cv2.cvtColor(resized_img, cv2.COLOR_GRAY2RGB)
 
-        # 7. Expand dimensions and apply MobileNetV2 preprocessing
-        img_expanded = np.expand_dims(img_rgb, axis=0)
-        processed_img = tf.keras.applications.mobilenet_v2.preprocess_input(img_expanded.astype(np.float32))
+        # 7. Expand dimensions and apply MobileNetV2 preprocessing.
+        img_expanded = np.expand_dims(model_input_img, axis=0)
+        processed_img = tf.keras.applications.mobilenet_v2.preprocess_input(
+            img_expanded.astype(np.float32)
+        )
 
-        # --- Prediction & Database Update ---
-        # The model predicts the probability of Parkinson's (class 1).
-        # A higher probability means a worse drawing.
-        # To get a "health" score, we take (1 - probability).
+        # --- Prediction (on correctly preprocessed image) ---
         parkinsons_prob = model.predict(processed_img)[0][0]
         health_prob = 1.0 - parkinsons_prob
         spiral_score = round(health_prob * 100, 1)
 
+        # --- Explainable AI (Grad-CAM) ---
+        # For Grad-CAM, overlay the heatmap on the cropped, thresholded B/W image.
+        # It must be converted to BGR (3-channel) for cv2.addWeighted.
+        xai_base_img = cv2.cvtColor(cropped_binary_img, cv2.COLOR_GRAY2BGR)
+        xai_image_url = generate_gradcam(
+            processed_img, xai_base_img, model, session_id, "out_relu"
+        )
+
+        # --- Generate Analysis Text & Database Update ---
+        spiral_analysis = []
+        if spiral_score < 50:
+            spiral_analysis.append(
+                "Analysis indicates potential motor impairments. Irregular kinematics and micro-tremors may be present in the highlighted region."
+            )
+            spiral_analysis.append(
+                "The model detected deviations from a smooth, consistent spiral path, which contributed to the risk score."
+            )
+        else:
+            spiral_analysis.append(
+                "The drawing shows stable motor control with smooth, consistent curvature."
+            )
+
         session_record.spiral_score = spiral_score
+        session_record.spiral_metrics = json.dumps(
+            {"analysis": spiral_analysis, "xai_image_url": xai_image_url}
+        )
         update_final_score(session_record)
         db.session.commit()
-
-        flash(f"Spiral drawing analyzed successfully! Score: {spiral_score:.1f}%", "success")
+        flash(
+            f"Spiral drawing analyzed successfully! Score: {spiral_score:.1f}%",
+            "success",
+        )
 
     except Exception as e:
         db.session.rollback()

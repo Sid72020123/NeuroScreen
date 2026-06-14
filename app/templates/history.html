@@ -64,13 +64,16 @@
                         {{ session.full_timestamp }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {% if session.voice_score is not none %}{{ session.voice_score }}%{% else %}Pending{% endif %}
+                        {% if session.voice_score is not none %}{{ "%.0f"|format(session.voice_score) }}%{% else
+                        %}Pending{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {% if session.spiral_score is not none %}{{ session.spiral_score }}%{% else %}Pending{% endif %}
+                        {% if session.spiral_score is not none %}{{ "%.0f"|format(session.spiral_score) }}%{% else
+                        %}Pending{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
-                        {% if session.final_score is not none %}{{ session.final_score }}%{% else %}Pending{% endif %}
+                        {% if session.final_score is not none %}{{ "%.0f"|format(session.final_score) }}%{% else
+                        %}Pending{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <a
