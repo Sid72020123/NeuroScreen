@@ -1,151 +1,300 @@
-{% extends 'base.html' %} {% block title %}Voice Analysis Test | NeuroScreen{% endblock %} {% block content %}
-<section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
-        <p class="text-sm font-bold uppercase tracking-[0.26em] text-sky-700">Voice Analysis Test</p>
-        <h2 class="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
-            Upload a clean WAV recording for immediate screening.
-        </h2>
-        <p class="mt-3 max-w-xl text-sm leading-7 text-slate-600">
-            This workflow extracts the seven librosa features, evaluates the trained Random Forest model, and stores the
-            result in your patient history.
-        </p>
+{% extends 'base.html' %} {% block title %}Voice Acoustics Test - NeuroScreen{% endblock %} {% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="pb-6 border-b border-slate-200 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900">Voice Acoustics Test</h1>
+                <p class="mt-1 text-slate-500">Session ID: {{ session_record.id }}</p>
+            </div>
+            <div class="mt-4 sm:mt-0">
+                <a
+                    href="{{ url_for('session_hub', session_id=session_record.id) }}"
+                    class="text-sm font-medium text-teal-600 hover:text-teal-500"
+                    >&larr; Back to Session Hub</a
+                >
+            </div>
+        </div>
+    </div>
 
-        <form method="POST" enctype="multipart/form-data" class="mt-8 space-y-4">
-            <label
-                for="voiceFile"
-                class="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed border-sky-200 bg-sky-50/70 px-6 py-8 text-center transition hover:border-sky-300 hover:bg-sky-50">
-                <input id="voiceFile" name="file" type="file" accept=".wav,audio/wav" class="sr-only" required />
-                <div
-                    class="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
-                    <svg viewBox="0 0 24 24" class="h-8 w-8 fill-none stroke-sky-600 stroke-[1.8]">
-                        <path d="M12 15V3" />
-                        <path d="M7 8l5-5 5 5" />
-                        <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
-                    </svg>
-                </div>
-                <p class="mt-4 text-lg font-bold text-slate-900">Drag and drop your WAV file</p>
-                <p class="mt-1 text-sm text-slate-600">or click here to browse your device</p>
-                <p id="fileName" class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    No file selected
+    <!-- Main Test Card -->
+    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+        <!-- Tab Navigation -->
+        <div class="border-b border-slate-200">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button
+                    id="tab-record"
+                    class="border-teal-500 text-teal-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    aria-current="page">
+                    Record in Browser
+                </button>
+                <button
+                    id="tab-upload"
+                    class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Upload .WAV File
+                </button>
+            </nav>
+        </div>
+
+        <form id="voiceForm" class="mt-8" enctype="multipart/form-data">
+            <input type="hidden" id="sessionId" name="session_id" value="{{ session_record.id }}" />
+            <input type="file" id="audioFile" name="file" class="hidden" accept="audio/wav,.wav" />
+
+            <!-- Tab Panel 1: Record in Browser -->
+            <div id="panel-record" class="space-y-6">
+                <p class="text-slate-500">
+                    Press the button, allow microphone access, and speak clearly for 5 seconds.
                 </p>
-            </label>
-
-            <button
-                type="submit"
-                class="inline-flex w-full items-center justify-center rounded-2xl bg-sky-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
-                Analyze Voice Sample
-            </button>
-        </form>
-
-        {% if latest_test %}
-        <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Latest Voice Report</p>
-            <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h3 class="text-xl font-bold text-slate-900">{{ latest_test.test_type_label }}</h3>
-                    <p class="mt-1 text-sm text-slate-600">
-                        {{ latest_test.full_timestamp }} · Risk score {{ latest_test.risk_score }}/100
-                    </p>
-                </div>
-                <a
-                    href="{{ url_for('generate_report') }}?test_id={{ latest_test.id }}"
-                    class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    Download PDF Report
-                </a>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-
-    <div class="space-y-6">
-        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Current Result</p>
-                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Clinical summary</h3>
-                </div>
                 <div
-                    class="rounded-full px-4 py-2 text-sm font-semibold {% if result %}{{ result.risk_profile.background }} {{ result.risk_profile.tone }}{% else %}bg-slate-100 text-slate-500{% endif %}">
-                    {% if result %}{{ result.risk_profile.label }}{% else %}Awaiting result{% endif %}
+                    class="flex flex-col items-center justify-center bg-slate-50 rounded-xl p-8 text-center border border-slate-200">
+                    <p class="text-sm font-medium text-slate-500">Countdown</p>
+                    <p id="countdownText" class="text-6xl font-bold text-teal-600 mt-2">5</p>
                 </div>
+                <button
+                    id="startButton"
+                    type="button"
+                    class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                    Start Microphone
+                </button>
             </div>
 
-            {% if result %}
-            <div class="mt-6 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div class="rounded-[1.75rem] bg-slate-50 p-6">
-                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Risk Score</p>
-                    <p class="mt-3 text-5xl font-extrabold tracking-tight text-slate-900">
-                        {{ result.record.risk_score }}<span class="text-2xl text-slate-400">/100</span>
-                    </p>
-                    <p class="mt-3 text-sm leading-7 text-slate-600">{{ result.risk_profile.description }}</p>
+            <!-- Tab Panel 2: Upload File -->
+            <div id="panel-upload" class="hidden space-y-6">
+                <p class="text-slate-500">
+                    Drag and drop a .WAV file into the area below, or click to select a file from your computer.
+                </p>
+                <div
+                    id="drop-zone"
+                    class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer">
+                    <div class="space-y-1 text-center">
+                        <svg
+                            class="mx-auto h-12 w-12 text-slate-400"
+                            stroke="currentColor"
+                            fill="none"
+                            viewBox="0 0 48 48"
+                            aria-hidden="true">
+                            <path
+                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                        <div class="flex text-sm text-slate-600">
+                            <span class="relative font-medium text-teal-600 hover:text-teal-500">
+                                <span>Upload a file</span>
+                            </span>
+                            <p class="pl-1">or drag and drop</p>
+                        </div>
+                        <p class="text-xs text-slate-500" id="file-name-display">WAV up to 10MB</p>
+                    </div>
                 </div>
-                <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-                    <p class="font-bold uppercase tracking-[0.2em] text-slate-500">Details</p>
-                    <dl class="mt-4 space-y-3">
-                        <div>
-                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Test Type</dt>
-                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.test_type_label }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Date</dt>
-                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.date }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Exact Time</dt>
-                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.time }}</dd>
-                        </div>
-                    </dl>
-                </div>
+                <button
+                    id="uploadButton"
+                    type="button"
+                    class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-slate-400 disabled:cursor-not-allowed"
+                    disabled>
+                    Submit Uploaded File
+                </button>
             </div>
 
-            <div class="mt-6 flex flex-wrap gap-3">
-                <a
-                    href="{{ url_for('generate_report') }}?test_id={{ result.record.id }}"
-                    class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    Download PDF Report
-                </a>
-                <a
-                    href="{{ url_for('history') }}"
-                    class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
-                    View History
-                </a>
-            </div>
-            {% else %}
-            <div
-                class="mt-6 rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-600">
-                Your most recent voice analysis will appear here after you upload a WAV file. The result card is
-                preserved so the layout matches the spiral page.
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
-            <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Workflow Notes</p>
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                <div class="rounded-3xl bg-slate-50 p-5">
-                    <p class="text-sm font-bold text-slate-900">7 Feature Extraction</p>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Jitter, shimmer, pitch standard deviation, zero-crossing rate, and three MFCC means.
-                    </p>
-                </div>
-                <div class="rounded-3xl bg-slate-50 p-5">
-                    <p class="text-sm font-bold text-slate-900">Clinical Storage</p>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Each test is saved with the exact timestamp and a test type of voice for accurate history
-                        tracking.
-                    </p>
-                </div>
-            </div>
-        </div>
+            <!-- Global Status Text -->
+            <p id="statusText" class="mt-6 text-center text-sm text-slate-500 min-h-[1.25rem]"></p>
+        </form>
     </div>
-</section>
+</div>
 {% endblock %} {% block scripts %}
 <script>
-    const fileInput = document.getElementById("voiceFile");
-    const fileName = document.getElementById("fileName");
+    document.addEventListener('DOMContentLoaded', () => {
+        // Common elements
+        const statusText = document.getElementById('statusText');
+        const sessionId = document.getElementById('sessionId').value;
+        const uploadUrl = {{ url_for('upload_voice') | tojson }};
 
-    fileInput.addEventListener("change", () => {
-        fileName.textContent = fileInput.files.length ? fileInput.files[0].name : "No file selected";
+        // Tab elements
+        const tabRecord = document.getElementById('tab-record');
+        const tabUpload = document.getElementById('tab-upload');
+        const panelRecord = document.getElementById('panel-record');
+        const panelUpload = document.getElementById('panel-upload');
+
+        // Upload panel elements
+        const audioFileInput = document.getElementById('audioFile');
+        const dropZone = document.getElementById('drop-zone');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const uploadButton = document.getElementById('uploadButton');
+
+        // Record panel elements
+        const startButton = document.getElementById('startButton');
+        const countdownText = document.getElementById('countdownText');
+
+        // --- Tab Switching Logic ---
+        function showRecordPanel() {
+            panelRecord.classList.remove('hidden');
+            panelUpload.classList.add('hidden');
+            tabRecord.classList.add('border-teal-500', 'text-teal-600');
+            tabRecord.classList.remove('border-transparent', 'text-slate-500');
+            tabUpload.classList.add('border-transparent', 'text-slate-500');
+            tabUpload.classList.remove('border-teal-500', 'text-teal-600');
+        }
+
+        function showUploadPanel() {
+            panelUpload.classList.remove('hidden');
+            panelRecord.classList.add('hidden');
+            tabUpload.classList.add('border-teal-500', 'text-teal-600');
+            tabUpload.classList.remove('border-transparent', 'text-slate-500');
+            tabRecord.classList.add('border-transparent', 'text-slate-500');
+            tabRecord.classList.remove('border-teal-500', 'text-teal-600');
+        }
+
+        tabRecord.addEventListener('click', showRecordPanel);
+        tabUpload.addEventListener('click', showUploadPanel);
+
+        // --- File Upload Panel Logic ---
+        dropZone.addEventListener('click', () => audioFileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-teal-500', 'bg-teal-50'); });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('border-teal-500', 'bg-teal-50'); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-teal-500', 'bg-teal-50');
+            if (e.dataTransfer.files.length) {
+                audioFileInput.files = e.dataTransfer.files;
+                updateFileName();
+            }
+        });
+        audioFileInput.addEventListener('change', updateFileName);
+
+        function updateFileName() {
+            if (audioFileInput.files.length > 0) {
+                fileNameDisplay.textContent = audioFileInput.files[0].name;
+                uploadButton.disabled = false;
+            } else {
+                fileNameDisplay.textContent = 'WAV up to 10MB';
+                uploadButton.disabled = true;
+            }
+        }
+
+        uploadButton.addEventListener('click', () => {
+            if (audioFileInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append('session_id', sessionId);
+                formData.append('file', audioFileInput.files[0]);
+                submitFormData(formData, uploadButton, 'Submit Uploaded File');
+            }
+        });
+
+        // --- Browser Recording Logic (from original script) ---
+        let audioContext, mediaStream, processorNode, sourceNode, silenceNode;
+        let audioChunks = [];
+        let countdownTimer = null;
+        let countdownSeconds = 5;
+
+        function writeString(view, offset, str) { for (let i = 0; i < str.length; i++) { view.setUint8(offset + i, str.charCodeAt(i)); } }
+        function encodeWav(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 4, true); // sampleRate * numChannels * bytesPerSample
+            view.setUint16(32, 4, true); // numChannels * bytesPerSample
+            view.setUint16(34, 16, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+        function mergeBuffers(buffers) {
+            let totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+            const merged = new Float32Array(totalLength);
+            let offset = 0;
+            buffers.forEach(buffer => { merged.set(buffer, offset); offset += buffer.length; });
+            return merged;
+        }
+        async function stopAndUpload() {
+            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+            countdownText.textContent = '0';
+            if (!audioContext || !mediaStream) { statusText.textContent = 'No recording captured.'; startButton.disabled = false; return; }
+
+            processorNode?.disconnect();
+            sourceNode?.disconnect();
+            silenceNode?.disconnect();
+            mediaStream.getTracks().forEach(track => track.stop());
+
+            const samples = mergeBuffers(audioChunks);
+            const wavBlob = encodeWav(samples, audioContext.sampleRate);
+            if (audioContext.state !== 'closed') { await audioContext.close(); }
+
+            const formData = new FormData();
+            formData.append('session_id', sessionId);
+            formData.append('file', wavBlob, 'recording.wav');
+            submitFormData(formData, startButton, 'Start Microphone');
+        }
+        async function startRecording() {
+            try {
+                statusText.textContent = 'Requesting microphone permission...';
+                startButton.disabled = true;
+                startButton.textContent = 'Listening...';
+                countdownSeconds = 5;
+                countdownText.textContent = String(countdownSeconds);
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                sourceNode = audioContext.createMediaStreamSource(mediaStream);
+                processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+                silenceNode = audioContext.createGain();
+                silenceNode.gain.value = 0;
+                audioChunks = [];
+
+                processorNode.onaudioprocess = (e) => { audioChunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+                sourceNode.connect(processorNode);
+                processorNode.connect(silenceNode);
+                silenceNode.connect(audioContext.destination);
+
+                statusText.textContent = 'Recording. Please speak clearly.';
+                countdownTimer = setInterval(() => {
+                    countdownSeconds -= 1;
+                    countdownText.textContent = String(Math.max(countdownSeconds, 0));
+                    if (countdownSeconds <= 0) { stopAndUpload(); }
+                }, 1000);
+            } catch (error) {
+                statusText.textContent = 'Microphone permission was not granted.';
+                startButton.disabled = false;
+                startButton.textContent = 'Start Microphone';
+            }
+        }
+        startButton.addEventListener('click', startRecording);
+
+        // --- Shared Form Submission Logic ---
+        async function submitFormData(formData, buttonElement, buttonText) {
+            statusText.textContent = 'Uploading and processing...';
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Processing...';
+
+            try {
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.message || 'The sample could not be processed.');
+                }
+                window.location.href = payload.redirect_url;
+            } catch (error) {
+                statusText.textContent = `Error: ${error.message}`;
+                buttonElement.disabled = false;
+                buttonElement.textContent = buttonText;
+            }
+        }
     });
 </script>
 {% endblock %}

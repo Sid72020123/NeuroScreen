@@ -1,0 +1,146 @@
+{% extends 'base.html' %} {% block title %}Screening Session - NeuroScreen{% endblock %} {% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="pb-6 border-b border-slate-200 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900">Screening Session</h1>
+                <p class="mt-1 text-slate-500">
+                    Session ID: {{ session_record.id }} &bull; Created: {{ session_record.full_timestamp }}
+                </p>
+            </div>
+            <div class="mt-4 sm:mt-0">
+                <a href="{{ url_for('dashboard') }}" class="text-sm font-medium text-teal-600 hover:text-teal-500"
+                    >&larr; Back to Dashboard</a
+                >
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Summary -->
+    <div class="mb-10">
+        <h2 class="text-lg font-medium text-slate-800 mb-3">Current Results</h2>
+        <dl class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <div class="px-4 py-5 bg-white shadow-sm rounded-2xl overflow-hidden border border-slate-200">
+                <dt class="text-sm font-medium text-slate-500 truncate">Voice Score</dt>
+                <dd class="mt-1 text-3xl font-semibold text-slate-900">{{ session_record.voice_text }}</dd>
+            </div>
+            <div class="px-4 py-5 bg-white shadow-sm rounded-2xl overflow-hidden border border-slate-200">
+                <dt class="text-sm font-medium text-slate-500 truncate">Spiral Score</dt>
+                <dd class="mt-1 text-3xl font-semibold text-slate-900">{{ session_record.spiral_text }}</dd>
+            </div>
+            <div class="px-4 py-5 bg-teal-600 shadow-sm rounded-2xl overflow-hidden border border-teal-700">
+                <dt class="text-sm font-medium text-teal-100 truncate">Final Risk Score</dt>
+                <dd class="mt-1 text-3xl font-semibold text-white">{{ session_record.final_text }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Test Modules -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Voice Test Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6">
+                <div class="flex items-center">
+                    {% if session_record.voice_score is not none %}
+                    <div class="flex-shrink-0 bg-green-100 text-green-800 rounded-full p-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path
+                                fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <span class="ml-3 text-sm font-medium text-green-800">Completed</span>
+                    {% else %}
+                    <div class="flex-shrink-0 bg-slate-100 text-slate-500 rounded-full p-2">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <span class="ml-3 text-sm font-medium text-slate-500">Pending</span>
+                    {% endif %}
+                </div>
+                <h3 class="mt-4 text-xl font-bold text-slate-800">Voice Acoustics Test</h3>
+                <p class="mt-1 text-slate-500">
+                    Analyze vocal biomarkers such as jitter, shimmer, and pitch from a short audio recording.
+                </p>
+                {% if session_record.voice_analysis and session_record.voice_analysis|length > 0 %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-sm font-semibold text-slate-800">Automated Analysis</h4>
+                    <ul class="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
+                        {% for point in session_record.voice_analysis %}
+                        <li>{{ point }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200">
+                <a
+                    href="{{ url_for('voice_test', session_id=session_record.id) }}"
+                    class="text-sm font-medium text-teal-600 hover:text-teal-500"
+                    >{% if session_record.voice_score is not none %}Review & Retake Test{% else %}Start Test{% endif %}
+                    &rarr;</a
+                >
+            </div>
+        </div>
+
+        <!-- Spiral Test Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6">
+                <div class="flex items-center">
+                    {% if session_record.spiral_score is not none %}
+                    <div class="flex-shrink-0 bg-green-100 text-green-800 rounded-full p-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path
+                                fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <span class="ml-3 text-sm font-medium text-green-800">Completed</span>
+                    {% else %}
+                    <div class="flex-shrink-0 bg-slate-100 text-slate-500 rounded-full p-2">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <span class="ml-3 text-sm font-medium text-slate-500">Pending</span>
+                    {% endif %}
+                </div>
+                <h3 class="mt-4 text-xl font-bold text-slate-800">Motor Kinematics Test</h3>
+                <p class="mt-1 text-slate-500">
+                    Assess fine motor control by analyzing a digital spiral drawing. (Analysis module in development).
+                </p>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200">
+                <a
+                    href="{{ url_for('spiral_test', session_id=session_record.id) }}"
+                    class="text-sm font-medium text-teal-600 hover:text-teal-500"
+                    >{% if session_record.spiral_score is not none %}Review Drawing{% else %}Start Test{% endif %}
+                    &rarr;</a
+                >
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
