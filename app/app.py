@@ -450,7 +450,7 @@ def build_report_pdf(session_record):
     pdf.cell(0, 8, "Explainable AI Analysis", ln=True)
     pdf.set_font("Helvetica", "", 11)
     for point in analysis_points:
-        pdf.multi_cell(0, 6, f"- {point}")
+        pdf.multi_cell(0, 6, f"- {point}", ln=1)
 
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 13)
