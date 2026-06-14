@@ -907,33 +907,27 @@ def upload_spiral(session_id):
             blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
         )
 
-        # 5. Crop tightly around the drawing to remove excess whitespace.
-        # We find contours on the inverted image (white drawing on black background).
+        # 5. Crop to the largest contour (the spiral) to remove edge artifacts.
+        # Since we used THRESH_BINARY_INV, the spiral is white, and findContours
+        # will find it directly.
         contours, _ = cv2.findContours(
-            cv2.bitwise_not(binary_img), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
-        cropped_binary_img = binary_img
+        cropped_binary_img = binary_img  # Default to the uncropped image
         if contours:
-            x_min, y_min, x_max, y_max = (
-                binary_img.shape[1],
-                binary_img.shape[0],
-                0,
-                0,
-            )
-            for contour in contours:
-                x, y, w, h = cv2.boundingRect(contour)
-                x_min, y_min = min(x_min, x), min(y_min, y)
-                x_max, y_max = max(x_max, x + w), max(y_max, y + h)
+            # Find the largest contour by area, assuming it's the spiral drawing
+            largest_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(largest_contour)
 
+            # Crop the image to the bounding box of the largest contour
+            cropped_img = binary_img[y : y + h, x : x + w]
+
+            # Add 10px black padding so the drawing isn't touching the image boundaries
             pad = 10
-            x_min, y_min = max(0, x_min - pad), max(0, y_min - pad)
-            x_max, y_max = min(binary_img.shape[1], x_max + pad), min(
-                binary_img.shape[0], y_max + pad
+            cropped_binary_img = cv2.copyMakeBorder(
+                cropped_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0
             )
-
-            if y_max > y_min and x_max > x_min:
-                cropped_binary_img = binary_img[y_min:y_max, x_min:x_max]
 
         # 6. Resize to (224, 224) for the model input.
         resized_img = cv2.resize(
@@ -951,8 +945,8 @@ def upload_spiral(session_id):
 
         # --- Prediction (on correctly preprocessed image) ---
         parkinsons_prob = model.predict(processed_img)[0][0]
-        health_prob = 1.0 - parkinsons_prob
-        spiral_score = round(health_prob * 100, 1)
+        # Convert to a risk score (0-100), where higher is higher risk.
+        spiral_score = round(parkinsons_prob * 100, 1)
 
         # --- Explainable AI (Grad-CAM) ---
         # For Grad-CAM, overlay the heatmap on the cropped, thresholded B/W image.
@@ -964,7 +958,8 @@ def upload_spiral(session_id):
 
         # --- Generate Analysis Text & Database Update ---
         spiral_analysis = []
-        if spiral_score < 50:
+        # Logic is now based on risk score: high score = high risk.
+        if spiral_score >= 50:
             spiral_analysis.append(
                 "Analysis indicates potential motor impairments. Irregular kinematics and micro-tremors may be present in the highlighted region."
             )
