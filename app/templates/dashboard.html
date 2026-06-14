@@ -1,0 +1,94 @@
+{% extends 'base.html' %} {% block title %}NeuroScreen Dashboard{% endblock %} {% block content %}
+<section class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-10">
+        <p class="text-sm font-bold uppercase tracking-[0.26em] text-sky-700">Dashboard</p>
+        <h2 class="mt-3 max-w-2xl text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+            Choose a screening workflow built for calm, clinical review.
+        </h2>
+        <p class="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            NeuroScreen keeps voice and spiral screening separate, with dedicated views for test capture, historical
+            review, and report generation.
+        </p>
+
+        <div class="mt-8 grid gap-4 sm:grid-cols-3">
+            <div class="rounded-3xl bg-slate-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Total Tests</p>
+                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ total_tests }}</p>
+            </div>
+            <div class="rounded-3xl bg-sky-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Voice Tests</p>
+                <p class="mt-2 text-3xl font-extrabold text-sky-900">{{ voice_tests }}</p>
+            </div>
+            <div class="rounded-3xl bg-teal-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Spiral Tests</p>
+                <p class="mt-2 text-3xl font-extrabold text-teal-900">{{ spiral_tests }}</p>
+            </div>
+        </div>
+
+        {% if latest_test %}
+        <div class="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Latest Result</p>
+                    <h3 class="mt-1 text-xl font-bold text-slate-900">{{ latest_test.test_type_label }}</h3>
+                    <p class="mt-1 text-sm text-slate-600">{{ latest_test.full_timestamp }}</p>
+                </div>
+                <a
+                    href="{{ url_for('generate_report') }}?test_id={{ latest_test.id }}"
+                    class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    Download PDF Report
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-5">
+        <a
+            href="{{ url_for('voice_test') }}"
+            class="group block rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft transition hover:-translate-y-1 hover:shadow-[0_30px_70px_-26px_rgba(15,23,42,0.32)] sm:p-8">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Voice Analysis Test</p>
+                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">
+                        Upload a WAV file for feature extraction and risk scoring.
+                    </h3>
+                    <p class="mt-3 text-sm leading-6 text-slate-600">
+                        The workflow extracts the seven voice features, runs the trained Random Forest model, and saves
+                        the test under your clinical history.
+                    </p>
+                </div>
+                <div class="rounded-2xl bg-sky-50 p-3 text-sky-700 transition group-hover:bg-sky-100">
+                    <svg viewBox="0 0 24 24" class="h-6 w-6 fill-none stroke-current stroke-2">
+                        <path d="M5 12h14" />
+                        <path d="M13 5l7 7-7 7" />
+                    </svg>
+                </div>
+            </div>
+        </a>
+
+        <a
+            href="{{ url_for('spiral_test') }}"
+            class="group block rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft transition hover:-translate-y-1 hover:shadow-[0_30px_70px_-26px_rgba(15,23,42,0.32)] sm:p-8">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Spiral Drawing Test</p>
+                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">
+                        Prepare for future OpenCV drawing analysis in the same interface.
+                    </h3>
+                    <p class="mt-3 text-sm leading-6 text-slate-600">
+                        This page already matches the voice test layout, with a drawing canvas placeholder and a
+                        disabled upload action for now.
+                    </p>
+                </div>
+                <div class="rounded-2xl bg-teal-50 p-3 text-teal-700 transition group-hover:bg-teal-100">
+                    <svg viewBox="0 0 24 24" class="h-6 w-6 fill-none stroke-current stroke-2">
+                        <path d="M4 20l6-6" />
+                        <path d="M14.5 5.5l4 4-10 10-4 1 1-4z" />
+                    </svg>
+                </div>
+            </div>
+        </a>
+    </div>
+</section>
+{% endblock %}

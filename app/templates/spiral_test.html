@@ -1,0 +1,122 @@
+{% extends 'base.html' %} {% block title %}Spiral Drawing Test | NeuroScreen{% endblock %} {% block content %}
+<section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+        <p class="text-sm font-bold uppercase tracking-[0.26em] text-teal-700">Spiral Drawing Test</p>
+        <h2 class="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+            Trace the same clinical workflow while the drawing engine is being integrated.
+        </h2>
+        <p class="mt-3 max-w-xl text-sm leading-7 text-slate-600">
+            This page intentionally mirrors the voice test layout so the future OpenCV pipeline can slot into the same
+            user experience without changing the flow.
+        </p>
+
+        <form method="POST" class="mt-8 space-y-4" onsubmit="return false;">
+            <div
+                class="flex min-h-[260px] flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed border-teal-200 bg-teal-50/70 px-6 py-8 text-center">
+                <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-teal-100">
+                    <svg viewBox="0 0 24 24" class="h-12 w-12 fill-none stroke-teal-600 stroke-[1.8]">
+                        <path d="M4 20l6-6" />
+                        <path d="M14.5 5.5l4 4-10 10-4 1 1-4z" />
+                        <path d="M15 5l4 4" />
+                    </svg>
+                </div>
+                <p class="mt-4 text-lg font-bold text-slate-900">Drawing canvas placeholder</p>
+                <p class="mt-1 text-sm text-slate-600">OpenCV-based spiral capture will be connected here later.</p>
+                <div class="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <canvas
+                        class="h-44 w-full rounded-xl bg-[repeating-linear-gradient(45deg,_rgba(14,165,233,0.04)_0,_rgba(14,165,233,0.04)_12px,_transparent_12px,_transparent_24px)]"
+                        aria-label="Spiral drawing placeholder canvas"></canvas>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                disabled
+                class="inline-flex w-full cursor-not-allowed items-center justify-center rounded-2xl bg-slate-200 px-5 py-3.5 text-sm font-bold text-slate-500">
+                Upload Drawing
+            </button>
+        </form>
+
+        <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Future Report Access</p>
+            <p class="mt-2 text-sm leading-7 text-slate-600">
+                Once the drawing analysis is active, a PDF report button will appear here with the same layout used on
+                the voice page.
+            </p>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Current Result</p>
+                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Clinical summary</h3>
+                </div>
+                <div class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+                    Awaiting result
+                </div>
+            </div>
+
+            <div class="mt-6 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div class="rounded-[1.75rem] bg-slate-50 p-6">
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Risk Score</p>
+                    <p class="mt-3 text-5xl font-extrabold tracking-tight text-slate-900">
+                        --<span class="text-2xl text-slate-400">/100</span>
+                    </p>
+                    <p class="mt-3 text-sm leading-7 text-slate-600">
+                        Spiral analysis is not yet enabled, so no score can be generated at this stage.
+                    </p>
+                </div>
+                <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+                    <p class="font-bold uppercase tracking-[0.2em] text-slate-500">Details</p>
+                    <dl class="mt-4 space-y-3">
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Test Type</dt>
+                            <dd class="mt-1 font-semibold text-slate-900">Spiral Drawing Test</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Status</dt>
+                            <dd class="mt-1 font-semibold text-slate-900">Placeholder only</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap gap-3">
+                <button
+                    type="button"
+                    disabled
+                    class="inline-flex items-center justify-center rounded-2xl bg-slate-200 px-5 py-3 text-sm font-semibold text-slate-500">
+                    Download PDF Report
+                </button>
+                <a
+                    href="{{ url_for('dashboard') }}"
+                    class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Workflow Notes</p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div class="rounded-3xl bg-slate-50 p-5">
+                    <p class="text-sm font-bold text-slate-900">Shared Layout</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                        The spiral and voice pages intentionally share the same structure for a consistent clinical
+                        experience.
+                    </p>
+                </div>
+                <div class="rounded-3xl bg-slate-50 p-5">
+                    <p class="text-sm font-bold text-slate-900">Future Integration</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                        Canvas capture and OpenCV preprocessing can be added without altering navigation or report
+                        delivery.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

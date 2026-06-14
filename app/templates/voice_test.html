@@ -1,0 +1,151 @@
+{% extends 'base.html' %} {% block title %}Voice Analysis Test | NeuroScreen{% endblock %} {% block content %}
+<section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+        <p class="text-sm font-bold uppercase tracking-[0.26em] text-sky-700">Voice Analysis Test</p>
+        <h2 class="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+            Upload a clean WAV recording for immediate screening.
+        </h2>
+        <p class="mt-3 max-w-xl text-sm leading-7 text-slate-600">
+            This workflow extracts the seven librosa features, evaluates the trained Random Forest model, and stores the
+            result in your patient history.
+        </p>
+
+        <form method="POST" enctype="multipart/form-data" class="mt-8 space-y-4">
+            <label
+                for="voiceFile"
+                class="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed border-sky-200 bg-sky-50/70 px-6 py-8 text-center transition hover:border-sky-300 hover:bg-sky-50">
+                <input id="voiceFile" name="file" type="file" accept=".wav,audio/wav" class="sr-only" required />
+                <div
+                    class="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
+                    <svg viewBox="0 0 24 24" class="h-8 w-8 fill-none stroke-sky-600 stroke-[1.8]">
+                        <path d="M12 15V3" />
+                        <path d="M7 8l5-5 5 5" />
+                        <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+                    </svg>
+                </div>
+                <p class="mt-4 text-lg font-bold text-slate-900">Drag and drop your WAV file</p>
+                <p class="mt-1 text-sm text-slate-600">or click here to browse your device</p>
+                <p id="fileName" class="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    No file selected
+                </p>
+            </label>
+
+            <button
+                type="submit"
+                class="inline-flex w-full items-center justify-center rounded-2xl bg-sky-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
+                Analyze Voice Sample
+            </button>
+        </form>
+
+        {% if latest_test %}
+        <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Latest Voice Report</p>
+            <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900">{{ latest_test.test_type_label }}</h3>
+                    <p class="mt-1 text-sm text-slate-600">
+                        {{ latest_test.full_timestamp }} · Risk score {{ latest_test.risk_score }}/100
+                    </p>
+                </div>
+                <a
+                    href="{{ url_for('generate_report') }}?test_id={{ latest_test.id }}"
+                    class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    Download PDF Report
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Current Result</p>
+                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Clinical summary</h3>
+                </div>
+                <div
+                    class="rounded-full px-4 py-2 text-sm font-semibold {% if result %}{{ result.risk_profile.background }} {{ result.risk_profile.tone }}{% else %}bg-slate-100 text-slate-500{% endif %}">
+                    {% if result %}{{ result.risk_profile.label }}{% else %}Awaiting result{% endif %}
+                </div>
+            </div>
+
+            {% if result %}
+            <div class="mt-6 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div class="rounded-[1.75rem] bg-slate-50 p-6">
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Risk Score</p>
+                    <p class="mt-3 text-5xl font-extrabold tracking-tight text-slate-900">
+                        {{ result.record.risk_score }}<span class="text-2xl text-slate-400">/100</span>
+                    </p>
+                    <p class="mt-3 text-sm leading-7 text-slate-600">{{ result.risk_profile.description }}</p>
+                </div>
+                <div class="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+                    <p class="font-bold uppercase tracking-[0.2em] text-slate-500">Details</p>
+                    <dl class="mt-4 space-y-3">
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Test Type</dt>
+                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.test_type_label }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Date</dt>
+                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.date }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Exact Time</dt>
+                            <dd class="mt-1 font-semibold text-slate-900">{{ result.record.time }}</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap gap-3">
+                <a
+                    href="{{ url_for('generate_report') }}?test_id={{ result.record.id }}"
+                    class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    Download PDF Report
+                </a>
+                <a
+                    href="{{ url_for('history') }}"
+                    class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+                    View History
+                </a>
+            </div>
+            {% else %}
+            <div
+                class="mt-6 rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-600">
+                Your most recent voice analysis will appear here after you upload a WAV file. The result card is
+                preserved so the layout matches the spiral page.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Workflow Notes</p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div class="rounded-3xl bg-slate-50 p-5">
+                    <p class="text-sm font-bold text-slate-900">7 Feature Extraction</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                        Jitter, shimmer, pitch standard deviation, zero-crossing rate, and three MFCC means.
+                    </p>
+                </div>
+                <div class="rounded-3xl bg-slate-50 p-5">
+                    <p class="text-sm font-bold text-slate-900">Clinical Storage</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                        Each test is saved with the exact timestamp and a test type of voice for accurate history
+                        tracking.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+    const fileInput = document.getElementById("voiceFile");
+    const fileName = document.getElementById("fileName");
+
+    fileInput.addEventListener("change", () => {
+        fileName.textContent = fileInput.files.length ? fileInput.files[0].name : "No file selected";
+    });
+</script>
+{% endblock %}

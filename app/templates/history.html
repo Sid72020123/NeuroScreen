@@ -1,0 +1,218 @@
+{% extends 'base.html' %} {% block title %}Patient History | NeuroScreen{% endblock %} {% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %} {% block content %}
+<section class="space-y-6">
+    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <p class="text-sm font-bold uppercase tracking-[0.26em] text-sky-700">Patient History</p>
+                <h2 class="mt-3 text-4xl font-extrabold tracking-tight text-slate-900">
+                    Historical results with exact timestamps and downloadable reports.
+                </h2>
+                <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                    Every patient test is shown in one place with date, exact time, test type, and risk score so
+                    clinicians can review trends at a glance.
+                </p>
+            </div>
+            {% if latest_test %}
+            <a
+                href="{{ url_for('generate_report') }}?test_id={{ latest_test.id }}"
+                class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                Download Latest PDF Report
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="mt-8 grid gap-4 sm:grid-cols-3">
+            <div class="rounded-3xl bg-slate-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Total Records</p>
+                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ records|length }}</p>
+            </div>
+            <div class="rounded-3xl bg-sky-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Latest Timestamp</p>
+                <p class="mt-2 text-base font-bold text-slate-900">
+                    {% if latest_test %}{{ latest_test.full_timestamp }}{% else %}No records yet{% endif %}
+                </p>
+            </div>
+            <div class="rounded-3xl bg-teal-50 p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Chart Status</p>
+                <p class="mt-2 text-base font-bold text-slate-900">
+                    {% if chart_records %}Trend ready{% else %}Waiting for tests{% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Historical Trend</p>
+                    <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Risk score over time</h3>
+                </div>
+            </div>
+
+            <div class="mt-6 h-[380px] rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Latest Summary</p>
+            {% if latest_test %}
+            <div class="mt-4 rounded-[1.75rem] bg-slate-50 p-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-2xl font-extrabold tracking-tight text-slate-900">
+                            {{ latest_test.test_type_label }}
+                        </h3>
+                        <p class="mt-1 text-sm text-slate-600">{{ latest_test.full_timestamp }}</p>
+                    </div>
+                    <div class="rounded-full bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700">
+                        {{ latest_test.risk_score }}/100
+                    </div>
+                </div>
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <a
+                        href="{{ url_for('generate_report') }}?test_id={{ latest_test.id }}"
+                        class="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                        Download PDF Report
+                    </a>
+                    <a
+                        href="{{ url_for('dashboard') }}"
+                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+                        Back to Dashboard
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div
+                class="mt-4 rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-600">
+                No patient tests have been recorded yet. Once tests exist, the latest summary and PDF action will appear
+                here.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-soft sm:p-8">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-sky-700">Records</p>
+                <h3 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Detailed patient table</h3>
+            </div>
+        </div>
+
+        {% if records %}
+        <div class="mt-6 overflow-x-auto">
+            <table
+                class="min-w-full border-separate border-spacing-0 overflow-hidden rounded-[1.5rem] border border-slate-200">
+                <thead class="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+                    <tr>
+                        <th class="px-5 py-4">Date</th>
+                        <th class="px-5 py-4">Exact Time</th>
+                        <th class="px-5 py-4">Test Type</th>
+                        <th class="px-5 py-4">Risk Score</th>
+                        <th class="px-5 py-4">Report</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 bg-white text-sm text-slate-700">
+                    {% for record in records %}
+                    <tr class="transition hover:bg-slate-50/80">
+                        <td class="px-5 py-4 font-semibold text-slate-900">{{ record.date }}</td>
+                        <td class="px-5 py-4">{{ record.time }}</td>
+                        <td class="px-5 py-4">{{ record.test_type_label }}</td>
+                        <td class="px-5 py-4">
+                            <span
+                                class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
+                                >{{ record.risk_score }}/100</span
+                            >
+                        </td>
+                        <td class="px-5 py-4">
+                            <a
+                                href="{{ url_for('generate_report') }}?test_id={{ record.id }}"
+                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+                                Download PDF Report
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div
+            class="mt-6 rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-600">
+            There are no historical patient tests for this account yet.
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+    const historyData = {{ chart_records | tojson }};
+    const canvas = document.getElementById('historyChart');
+
+    if (historyData.length && canvas) {
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: historyData.map((item) => item.full_timestamp),
+                datasets: [{
+                    label: 'Risk Score',
+                    data: historyData.map((item) => item.risk_score),
+                    borderColor: '#0f766e',
+                    backgroundColor: 'rgba(15, 118, 110, 0.12)',
+                    pointBackgroundColor: '#0ea5e9',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    borderWidth: 3,
+                    tension: 0.38,
+                    fill: true,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        padding: 12,
+                    },
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.15)',
+                        },
+                        ticks: {
+                            color: '#64748b',
+                            maxRotation: 35,
+                            minRotation: 25,
+                        },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: 100,
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.15)',
+                        },
+                        ticks: {
+                            color: '#64748b',
+                        },
+                    },
+                },
+            },
+        });
+    } else if (canvas) {
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#64748b';
+        context.font = '600 16px Manrope, sans-serif';
+        context.fillText('No history available yet.', 40, 60);
+    }
+</script>
+{% endblock %}
