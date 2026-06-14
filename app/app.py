@@ -5,6 +5,7 @@ from io import BytesIO
 
 import librosa
 import numpy as np
+import pandas as pd
 from flask import (
     Flask,
     abort,
@@ -248,14 +249,18 @@ def extract_voice_features(file_path):
 
 def calculate_voice_score(features_dict):
     model = get_voice_model()
-    feature_values = [
-        [features_dict.get(column, 0.0) for column in VOICE_FEATURE_COLUMNS]
+
+    # Create a DataFrame to ensure feature names are passed to the model,
+    # preventing a Scikit-learn UserWarning.
+    feature_values_list = [
+        features_dict.get(column, 0.0) for column in VOICE_FEATURE_COLUMNS
     ]
+    feature_df = pd.DataFrame([feature_values_list], columns=VOICE_FEATURE_COLUMNS)
 
     if model is not None and hasattr(model, "predict_proba"):
-        probability = float(model.predict_proba(feature_values)[0][1])
+        probability = float(model.predict_proba(feature_df)[0][1])
     elif model is not None and hasattr(model, "predict"):
-        probability = float(model.predict(feature_values)[0])
+        probability = float(model.predict(feature_df)[0])
     else:
         jitter = features_dict.get("Jitter", 0.0)
         shimmer = features_dict.get("Shimmer", 0.0)
@@ -318,6 +323,38 @@ def format_timestamp(timestamp_value):
     return timestamp_value.strftime("%Y-%m-%d %I:%M %p")
 
 
+def get_score_classes(score):
+    """Return a dictionary of Tailwind CSS classes based on a score."""
+    if score is None:
+        return {
+            "text": "text-slate-500",
+            "bg": "bg-slate-100",
+            "border": "border-slate-200",
+            "name": "Pending",
+        }
+    elif score <= 40:
+        return {
+            "text": "text-emerald-600",
+            "bg": "bg-emerald-50/50",
+            "border": "border-emerald-100",
+            "name": "Low Risk",
+        }
+    elif score <= 60:
+        return {
+            "text": "text-amber-600",
+            "bg": "bg-amber-50/50",
+            "border": "border-amber-100",
+            "name": "Moderate Risk",
+        }
+    else:
+        return {
+            "text": "text-rose-600",
+            "bg": "bg-rose-50/50",
+            "border": "border-rose-100",
+            "name": "High Risk",
+        }
+
+
 def serialize_session(session_record):
     voice_metrics = {}
     if session_record.voice_metrics:
@@ -349,6 +386,9 @@ def serialize_session(session_record):
         "final_text": format_score(session_record.final_score),
         "voice_metrics": voice_metrics,
         "voice_analysis": voice_analysis,
+        "final_score_classes": get_score_classes(session_record.final_score),
+        "voice_score_classes": get_score_classes(session_record.voice_score),
+        "spiral_score_classes": get_score_classes(session_record.spiral_score),
     }
 
 
