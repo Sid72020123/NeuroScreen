@@ -6,10 +6,11 @@ from io import BytesIO
 from zoneinfo import ZoneInfo
 import base64
 import cv2
-import librosa
+import parselmouth
+from parselmouth.praat import call
+import joblib
 import tensorflow as tf
 import numpy as np
-import pandas as pd
 from flask import (
     Flask,
     abort,
@@ -46,21 +47,22 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 SAVED_MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
 SPIRAL_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "spiral_model.h5")
-VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "voice_model.pkl")
+VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "xgboost_combined_model.pkl")
+SCALER_PATH = os.path.join(SAVED_MODELS_DIR, "standard_scaler.pkl")
 ALLOWED_AUDIO_EXTENSIONS = {"wav"}
 VOICE_FEATURE_COLUMNS = [
-    "Jitter",
-    "Shimmer",
-    "Pitch_STD",
-    "ZCR",
-    "MFCC_1",
-    "MFCC_2",
-    "MFCC_3",
+    "MDVP:Fo(Hz)",
+    "MDVP:Fhi(Hz)",
+    "MDVP:Flo(Hz)",
+    "MDVP:Jitter(%)",
+    "MDVP:Shimmer",
+    "NHR",
+    "HNR",
 ]
 VOICE_ANALYSIS_THRESHOLDS = {
-    "Jitter": 0.02,
-    "Shimmer": 0.05,
-    "Pitch_STD": 28.0,
+    # Using a more sensitive threshold based on UCI dataset characteristics
+    "MDVP:Jitter(%)": 0.007,
+    "MDVP:Shimmer": 0.05,
 }
 
 os.makedirs(INSTANCE_DIR, exist_ok=True)
@@ -164,22 +166,33 @@ def audio_extension_allowed(filename):
     )
 
 
-def load_voice_model():
-    import joblib
-
-    if not os.path.exists(VOICE_MODEL_PATH):
-        return None
-    return joblib.load(VOICE_MODEL_PATH)
-
-
 _VOICE_MODEL = None
+_VOICE_SCALER = None
 
 
-def get_voice_model():
-    global _VOICE_MODEL
-    if _VOICE_MODEL is None:
-        _VOICE_MODEL = load_voice_model()
-    return _VOICE_MODEL
+def get_voice_dependencies():
+    """Loads and caches the XGBoost model and the StandardScaler."""
+    global _VOICE_MODEL, _VOICE_SCALER
+    if _VOICE_MODEL is None or _VOICE_SCALER is None:
+        try:
+            if os.path.exists(VOICE_MODEL_PATH):
+                _VOICE_MODEL = joblib.load(VOICE_MODEL_PATH)
+                print(f"Successfully loaded voice model from {VOICE_MODEL_PATH}")
+            else:
+                print(f"Warning: Voice model not found at {VOICE_MODEL_PATH}")
+                _VOICE_MODEL = None
+
+            if os.path.exists(SCALER_PATH):
+                _VOICE_SCALER = joblib.load(SCALER_PATH)
+                print(f"Successfully loaded voice scaler from {SCALER_PATH}")
+            else:
+                print(f"Warning: Voice scaler not found at {SCALER_PATH}")
+                _VOICE_SCALER = None
+        except Exception as e:
+            print(f"Error loading voice dependencies: {e}")
+            _VOICE_MODEL = None
+            _VOICE_SCALER = None
+    return _VOICE_MODEL, _VOICE_SCALER
 
 
 _SPIRAL_MODEL = None
@@ -199,107 +212,43 @@ def get_spiral_model():
     return _SPIRAL_MODEL
 
 
-def extract_voice_features(file_path):
+def extract_praat_features(filepath):
+    """
+    Extracts the 7 core acoustic features using Parselmouth (Praat) to match
+    the XGBoost model's training data.
+    """
     try:
-        y, sr = librosa.load(file_path, sr=None)
-        if len(y) == 0:
-            return {
-                "Jitter": 0.0,
-                "Shimmer": 0.0,
-                "Pitch_STD": 0.0,
-                "ZCR": 0.0,
-                "MFCC_1": 0.0,
-                "MFCC_2": 0.0,
-                "MFCC_3": 0.0,
-            }
+        sound = parselmouth.Sound(filepath)
+        pitch = sound.to_pitch()
 
-        f0, voiced_flag, _ = librosa.pyin(
-            y,
-            fmin=50,
-            fmax=300,
-            sr=sr,
-            frame_length=2048,
-            hop_length=512,
-        )
-        rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+        # Pitch Features
+        mean_pitch = call(pitch, "Get mean", 0, 0, "Hertz")
+        max_pitch = call(pitch, "Get maximum", 0, 0, "Hertz", "Parabolic")
+        min_pitch = call(pitch, "Get minimum", 0, 0, "Hertz", "Parabolic")
 
-        min_len = min(len(f0), len(rms), len(voiced_flag))
-        f0 = f0[:min_len]
-        rms = rms[:min_len]
-        voiced_flag = voiced_flag[:min_len]
-
-        f0_voiced = f0[voiced_flag]
-        rms_voiced = rms[voiced_flag]
-
-        if len(f0_voiced) > 1:
-            periods = 1.0 / f0_voiced
-            mean_period = np.mean(periods)
-            jitter = (
-                np.mean(np.abs(np.diff(periods))) / mean_period
-                if mean_period > 0
-                else 0.0
-            )
-            pitch_std = float(np.std(f0_voiced))
-        else:
-            jitter = 0.0
-            pitch_std = 0.0
-
-        if len(rms_voiced) > 1:
-            mean_rms = np.mean(rms_voiced)
-            shimmer = (
-                np.mean(np.abs(np.diff(rms_voiced))) / mean_rms if mean_rms > 0 else 0.0
-            )
-        else:
-            shimmer = 0.0
-
-        zcr = float(np.mean(librosa.feature.zero_crossing_rate(y)))
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=3)
-        mfcc_means = np.mean(mfccs, axis=1)
-
-        return {
-            "Jitter": float(jitter),
-            "Shimmer": float(shimmer),
-            "Pitch_STD": float(pitch_std),
-            "ZCR": float(zcr),
-            "MFCC_1": float(mfcc_means[0]) if len(mfcc_means) > 0 else 0.0,
-            "MFCC_2": float(mfcc_means[1]) if len(mfcc_means) > 1 else 0.0,
-            "MFCC_3": float(mfcc_means[2]) if len(mfcc_means) > 2 else 0.0,
-        }
-    except Exception:
-        return {
-            "Jitter": 0.0,
-            "Shimmer": 0.0,
-            "Pitch_STD": 0.0,
-            "ZCR": 0.0,
-            "MFCC_1": 0.0,
-            "MFCC_2": 0.0,
-            "MFCC_3": 0.0,
-        }
-
-
-def calculate_voice_score(features_dict):
-    model = get_voice_model()
-
-    # Create a DataFrame to ensure feature names are passed to the model,
-    # preventing a Scikit-learn UserWarning.
-    feature_values_list = [
-        features_dict.get(column, 0.0) for column in VOICE_FEATURE_COLUMNS
-    ]
-    feature_df = pd.DataFrame([feature_values_list], columns=VOICE_FEATURE_COLUMNS)
-
-    if model is not None and hasattr(model, "predict_proba"):
-        probability = float(model.predict_proba(feature_df)[0][1])
-    elif model is not None and hasattr(model, "predict"):
-        probability = float(model.predict(feature_df)[0])
-    else:
-        jitter = features_dict.get("Jitter", 0.0)
-        shimmer = features_dict.get("Shimmer", 0.0)
-        pitch_std = features_dict.get("Pitch_STD", 0.0)
-        probability = min(
-            1.0, (jitter * 12.0 + shimmer * 8.0 + pitch_std / 120.0) / 3.0
+        # Jitter & Shimmer
+        pulses = call([sound, pitch], "To PointProcess (cc)")
+        jitter = call(pulses, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
+        shimmer = call(
+            [sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6
         )
 
-    return round(max(0.0, min(probability * 100.0, 100.0)), 1)
+        # HNR & NHR
+        harmonicity = sound.to_harmonicity_cc()
+        hnr = call(harmonicity, "Get mean", 0, 0)
+
+        if hnr and not np.isnan(hnr):
+            nhr = 10.0 ** (-hnr / 10.0)
+        else:
+            nhr = 0.0  # Or np.nan, handled later
+
+        # Return in the exact order the model was trained on
+        return [mean_pitch, max_pitch, min_pitch, jitter, shimmer, nhr, hnr]
+
+    except Exception as e:
+        # Praat can fail on silent/corrupt files. Return NaNs for graceful failure.
+        print(f"Error processing {filepath} with Parselmouth: {e}")
+        return [np.nan] * 7
 
 
 def update_final_score(session_record):
@@ -312,33 +261,24 @@ def update_final_score(session_record):
 
 
 def generate_clinical_analysis(features_dict):
-    jitter = parse_float(features_dict.get("Jitter")) or 0.0
-    shimmer = parse_float(features_dict.get("Shimmer")) or 0.0
-    pitch_std = parse_float(features_dict.get("Pitch_STD")) or 0.0
+    jitter = parse_float(features_dict.get("MDVP:Jitter(%)")) or 0.0
+    shimmer = parse_float(features_dict.get("MDVP:Shimmer")) or 0.0
 
-    jitter_threshold = VOICE_ANALYSIS_THRESHOLDS["Jitter"]
-    shimmer_threshold = VOICE_ANALYSIS_THRESHOLDS["Shimmer"]
-    pitch_threshold = VOICE_ANALYSIS_THRESHOLDS["Pitch_STD"]
+    jitter_threshold = VOICE_ANALYSIS_THRESHOLDS["MDVP:Jitter(%)"]
+    shimmer_threshold = VOICE_ANALYSIS_THRESHOLDS["MDVP:Shimmer"]
 
     jitter_line = (
         f"Jitter is elevated at {jitter:.4f}, above the baseline of {jitter_threshold:.4f}."
         if jitter > jitter_threshold
         else f"Jitter is within the expected range at {jitter:.4f}, at or below the {jitter_threshold:.4f} baseline."
     )
-
     shimmer_line = (
         f"Shimmer is elevated at {shimmer:.4f}, suggesting more amplitude instability than the {shimmer_threshold:.4f} baseline."
         if shimmer > shimmer_threshold
         else f"Shimmer remains controlled at {shimmer:.4f}, staying near or below the {shimmer_threshold:.4f} baseline."
     )
 
-    pitch_line = (
-        f"Pitch variability is higher than expected at {pitch_std:.2f} Hz, above the {pitch_threshold:.2f} Hz baseline."
-        if pitch_std > pitch_threshold
-        else f"Pitch variability is relatively stable at {pitch_std:.2f} Hz and remains within the {pitch_threshold:.2f} Hz baseline."
-    )
-
-    return [jitter_line, shimmer_line, pitch_line]
+    return [jitter_line, shimmer_line]
 
 
 def format_score(value):
@@ -513,13 +453,13 @@ def build_report_pdf(session_record):
     pdf.set_font("Helvetica", "", 10)
 
     metric_notes = {
-        "Jitter": "Voice timing stability",
-        "Shimmer": "Amplitude stability",
-        "Pitch_STD": "Pitch variation",
-        "ZCR": "Speech waveform activity",
-        "MFCC_1": "Spectral shape",
-        "MFCC_2": "Spectral shape",
-        "MFCC_3": "Spectral shape",
+        "MDVP:Fo(Hz)": "Mean vocal pitch",
+        "MDVP:Fhi(Hz)": "Maximum vocal pitch",
+        "MDVP:Flo(Hz)": "Minimum vocal pitch",
+        "MDVP:Jitter(%)": "Voice timing stability (Jitter)",
+        "MDVP:Shimmer": "Amplitude stability (Shimmer)",
+        "NHR": "Noise-to-Harmonics Ratio",
+        "HNR": "Harmonics-to-Noise Ratio",
     }
 
     for metric_name in VOICE_FEATURE_COLUMNS:
@@ -799,14 +739,39 @@ def upload_voice():
 
     try:
         audio_file.save(temp_path)
-        features = extract_voice_features(temp_path)
-        voice_score = calculate_voice_score(features)
 
+        # 1. Load model and scaler
+        model, scaler = get_voice_dependencies()
+        if model is None or scaler is None:
+            message = "Voice analysis model or scaler is not available. Please check server logs."
+            if wants_json_response():
+                return jsonify({"success": False, "message": message}), 503
+            flash(message, "error")
+            return redirect(url_for("voice_test", session_id=session_record.id))
+
+        # 2. Extract Praat features
+        feature_values = extract_praat_features(temp_path)
+        if any(np.isnan(val) for val in feature_values):
+            message = "Could not extract valid audio features. The audio may be silent or corrupted."
+            if wants_json_response():
+                return jsonify({"success": False, "message": message}), 400
+            flash(message, "danger")
+            return redirect(url_for("voice_test", session_id=session_record.id))
+
+        # 3. Scale features and predict
+        features_for_model = np.array([feature_values])
+        scaled_features = scaler.transform(features_for_model)
+        probability = model.predict_proba(scaled_features)[0][1]
+        voice_score = round(float(probability) * 100, 1)
+
+        # 4. Store results
+        features_dict = dict(zip(VOICE_FEATURE_COLUMNS, feature_values))
         session_record.voice_score = voice_score
-        session_record.voice_metrics = json.dumps(features, sort_keys=True)
+        session_record.voice_metrics = json.dumps(features_dict, sort_keys=True)
         update_final_score(session_record)
         db.session.commit()
 
+        # 5. Return response
         redirect_url = url_for("session_hub", session_id=session_record.id)
         if wants_json_response():
             return jsonify(
@@ -814,8 +779,8 @@ def upload_voice():
                     "success": True,
                     "message": "Voice test saved.",
                     "voice_score": voice_score,
-                    "voice_metrics": features,
-                    "clinical_analysis": generate_clinical_analysis(features),
+                    "voice_metrics": features_dict,
+                    "clinical_analysis": generate_clinical_analysis(features_dict),
                     "redirect_url": redirect_url,
                 }
             )

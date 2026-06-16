@@ -17,11 +17,11 @@ NeuroScreen integrates two distinct analysis modules to create a holistic patien
 
 ### Voice Analysis
 
-Utilizes the `librosa` library to perform acoustic analysis on voice recordings. The system extracts key vocal biomarkers known to be affected by neurological conditions:
+Utilizes `parselmouth`, a Python interface to the Praat phonetics software, to perform a clinically-standard acoustic analysis on voice recordings. The system extracts key vocal biomarkers that correspond to the widely-used UCI Parkinson's dataset:
 
-- **Jitter (Mean & Local):** Measures the frequency variation from cycle to cycle in vocal fold vibration, indicating phonatory instability.
-- **Shimmer (Mean & Local):** Measures the amplitude variation of the sound wave, indicating irregularities in vocal fold vibration.
-- **Pitch Standard Deviation:** Quantifies the variability in the fundamental frequency (F0), reflecting overall pitch control.
+- **MDVP:Fo(Hz), Fhi(Hz), Flo(Hz):** Measures the mean, maximum, and minimum fundamental frequency (pitch), indicating overall vocal range and control.
+- **Jitter & Shimmer:** Quantifies cycle-to-cycle variations in frequency (Jitter) and amplitude (Shimmer), which are classic indicators of phonatory instability.
+- **HNR & NHR:** The Harmonics-to-Noise Ratio (HNR) and Noise-to-Harmonics Ratio (NHR) measure the degree of acoustic periodicity, with lower HNR (and higher NHR) suggesting increased vocal hoarseness or breathiness.
 
 ### Motor Kinematics (Spiral Analysis)
 
@@ -73,7 +73,7 @@ Relying on such filtered and smoothed data would introduce a high risk of **dang
 
 - **Backend:** Flask, Python
 - **Machine Learning:** TensorFlow, Keras, Scikit-learn
-- **Data Processing:** OpenCV, Librosa, NumPy, Pandas
+- **Data Processing:** OpenCV, Parselmouth, NumPy, Pandas
 - **Frontend:** Tailwind CSS, Jinja2
 - **Database:** SQLAlchemy with SQLite
 
