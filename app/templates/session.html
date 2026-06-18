@@ -2,7 +2,7 @@
 %}
 <div class="container mx-auto">
     <div class="flex justify-between items-center mb-8">
-        <h1 class="text-3xl font-bold text-slate-800">Clinical Report: Session #{{ session_record.id }}</h1>
+        <h1 class="text-3xl font-bold text-slate-800">Clinical Report: Session #{{ session_record.session_number }}</h1>
         <div class="space-x-4">
             <a
                 href="{{ url_for('generate_report', session_id=session_record.id) }}"

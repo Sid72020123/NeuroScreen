@@ -6,7 +6,19 @@
             <h1 class="text-3xl font-bold tracking-tight text-slate-900">Screening History</h1>
             <p class="mt-1 text-slate-500">Review your past screening sessions.</p>
         </div>
-        <div class="mt-4 md:mt-0">
+        <div class="mt-4 md:mt-0 flex space-x-3">
+            <a
+                href="{{ url_for('generate_history_report') }}"
+                class="inline-flex items-center rounded-md border border-transparent bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2">
+                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Download PDF
+            </a>
             <a
                 href="{{ url_for('dashboard') }}"
                 class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
@@ -63,7 +75,9 @@
                 <tbody class="bg-white divide-y divide-slate-200">
                     {% for session in sessions %}
                     <tr class="hover:bg-slate-50/75">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-slate-700">#{{ session.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-slate-700">
+                            #{{ session.session_number }}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{{ session.full_timestamp }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             {% if session.voice_score is not none %}<span class="{{ session.voice_score_classes.text }}"

@@ -417,7 +417,18 @@ def get_score_classes(score):
         }
 
 
-def serialize_session(session_record):
+def serialize_session(session_record, session_number=None):
+    if session_number is None:
+        all_user_sessions = (
+            ScreeningSession.query.filter_by(user_id=session_record.user_id)
+            .order_by(ScreeningSession.timestamp.asc())
+            .all()
+        )
+        try:
+            session_number = all_user_sessions.index(session_record) + 1
+        except ValueError:
+            session_number = session_record.id
+
     voice_metrics = {}
     if session_record.voice_metrics:
         try:
@@ -436,6 +447,7 @@ def serialize_session(session_record):
     voice_analysis = generate_clinical_analysis(voice_metrics) if voice_metrics else []
     return {
         "id": session_record.id,
+        "session_number": session_number,
         "date": (
             session_record.timestamp.strftime("%Y-%m-%d")
             if session_record.timestamp
@@ -513,7 +525,7 @@ def build_report_pdf(session_record):
     pdf.multi_cell(
         page_width - 70,
         6,
-        f"Session ID: {session_record.id}\nDate: {session_data['full_timestamp']}\nPatient: {session_record.user.username}",
+        f"Session ID: #{session_data['session_number']}\nDate: {session_data['full_timestamp']}\nPatient: {session_record.user.username}",
         border=1,
         fill=True,
     )
@@ -606,7 +618,7 @@ def build_report_pdf(session_record):
 
 
 def generate_gradcam(
-    img_array, base_img, model, session_id, last_conv_layer_name="out_relu"
+    img_array, base_img, model, session_id, user_id, last_conv_layer_name="out_relu"
 ):
     grad_model = tf.keras.models.Model(
         [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
@@ -651,12 +663,12 @@ def generate_gradcam(
         )  # Red rectangle
 
     # Save the annotated image
-    uploads_dir = os.path.join(BASE_DIR, "static", "uploads")
-    os.makedirs(uploads_dir, exist_ok=True)
-    save_path = os.path.join(uploads_dir, f"session_{session_id}_xai.jpg")
+    user_uploads_dir = os.path.join(BASE_DIR, "static", "uploads", f"user_{user_id}")
+    os.makedirs(user_uploads_dir, exist_ok=True)
+    save_path = os.path.join(user_uploads_dir, f"session_{session_id}_xai.jpg")
     cv2.imwrite(save_path, superimposed_img)
 
-    return f"/static/uploads/session_{session_id}_xai.jpg"
+    return f"/static/uploads/user_{user_id}/session_{session_id}_xai.jpg"
 
 
 @app.route("/")
@@ -679,7 +691,10 @@ def register():
             flash("Name and password are required.", "danger")
             return render_template("register.html")
 
-        existing_user = User.query.filter_by(username=username).first()
+        # Case-insensitive query to prevent duplicate handles like 'Admin' vs 'admin'
+        existing_user = User.query.filter(
+            db.func.lower(User.username) == db.func.lower(username)
+        ).first()
         if existing_user is not None:
             flash("That account already exists.", "danger")
             return render_template("register.html")
@@ -690,7 +705,7 @@ def register():
         )
         db.session.add(user)
         db.session.commit()
-        login_user(user)
+        login_user(user, remember=True)
         flash("Account created.", "success")
         return redirect(url_for("dashboard"))
 
@@ -705,13 +720,17 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = User.query.filter_by(username=username).first()
+
+        # Case-insensitive query prevents mobile auto-capitalization bugs from failing login
+        user = User.query.filter(
+            db.func.lower(User.username) == db.func.lower(username)
+        ).first()
 
         if user is None or not check_password_hash(user.password_hash, password):
             flash("Invalid name or password.", "danger")
             return render_template("login.html")
 
-        login_user(user)
+        login_user(user, remember=True)
         flash("Signed in.", "success")
         return redirect(url_for("dashboard"))
 
@@ -747,7 +766,11 @@ def dashboard():
 
     return render_template(
         "dashboard.html",
-        recent_session=serialize_session(recent_session) if recent_session else None,
+        recent_session=(
+            serialize_session(recent_session, session_number=total_sessions)
+            if recent_session
+            else None
+        ),
         total_sessions=total_sessions,
     )
 
@@ -1079,7 +1102,7 @@ def upload_spiral(session_id):
 
         # 3. Generate Explainable AI (Grad-CAM) heatmap.
         xai_image_url = generate_gradcam(
-            processed_img, xai_base_img, model, session_id, "out_relu"
+            processed_img, xai_base_img, model, session_id, current_user.id, "out_relu"
         )
 
         # 4. Generate analysis text based on the risk score.
@@ -1141,8 +1164,11 @@ def history():
         .all()
     )
 
+    # Order is desc, so we calculate the numbers properly based on the total
+    total = len(sessions)
     serialized_sessions = [
-        serialize_session(session_record) for session_record in sessions
+        serialize_session(session_record, session_number=total - i)
+        for i, session_record in enumerate(sessions)
     ]
 
     return render_template(
@@ -1172,6 +1198,67 @@ def generate_report():
         mimetype="application/pdf",
         as_attachment=True,
         download_name=download_name,
+    )
+
+
+@app.route("/api/generate_history_report/", methods=["GET"])
+@login_required
+def generate_history_report():
+    sessions = (
+        ScreeningSession.query.filter_by(user_id=current_user.id)
+        .order_by(ScreeningSession.timestamp.asc())
+        .all()
+    )
+
+    pdf = FPDF(unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_fill_color(13, 110, 253)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(
+        0,
+        16,
+        f"NeuroScreen History - {current_user.username}",
+        ln=True,
+        align="C",
+        fill=True,
+    )
+    pdf.ln(8)
+
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_fill_color(226, 232, 240)
+
+    # Table Header
+    pdf.cell(25, 10, "Session", border=1, fill=True, align="C")
+    pdf.cell(50, 10, "Date", border=1, fill=True, align="C")
+    pdf.cell(35, 10, "Voice Risk", border=1, fill=True, align="C")
+    pdf.cell(35, 10, "Spiral Risk", border=1, fill=True, align="C")
+    pdf.cell(35, 10, "Final Risk", border=1, fill=True, ln=True, align="C")
+
+    pdf.set_font("Helvetica", "", 10)
+    for i, s in enumerate(sessions):
+        ser = serialize_session(s, session_number=i + 1)
+        pdf.cell(25, 10, f"#{ser['session_number']}", border=1, align="C")
+        pdf.cell(50, 10, ser["full_timestamp"], border=1, align="C")
+        pdf.cell(35, 10, ser["voice_text"], border=1, align="C")
+        pdf.cell(35, 10, ser["spiral_text"], border=1, align="C")
+        pdf.cell(35, 10, ser["final_text"], border=1, ln=True, align="C")
+
+    buffer = BytesIO()
+    pdf_bytes = pdf.output(dest="S")
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin1")
+    buffer.write(pdf_bytes)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"neuroscreen_history_{current_user.username}.pdf",
     )
 
 

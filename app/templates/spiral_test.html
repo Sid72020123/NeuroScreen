@@ -1,38 +1,34 @@
-{% extends 'base.html' %} {% block title %}Spiral Drawing Test - NeuroScreen{% endblock %} {% block content %}
+{% extends 'base.html' %} {% block title %}Spiral Test - NeuroScreen{% endblock %} {% block content %}
 <!-- Header -->
 <div class="pb-6 border-b border-slate-200 mb-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <h1 class="text-3xl font-bold text-slate-900">Motor Kinematics Test (Pen & Paper)</h1>
-            <p class="mt-1 text-slate-500">Session ID: #{{ session_record.id }}</p>
+            <h1 class="text-3xl font-bold text-slate-900">Motor Kinematics (Spiral Test)</h1>
+            <p class="mt-1 text-slate-500">Session ID: {{ session_record.id }}</p>
         </div>
         <div class="mt-4 sm:mt-0">
             <a
                 href="{{ url_for('session_hub', session_id=session_record.id) }}"
-                class="text-sm font-medium text-teal-600 hover:text-teal-500"
-                >&larr; Back to Session Hub</a
-            >
+                class="text-sm font-medium text-teal-600 hover:text-teal-500">
+                &larr; Back to Session Hub
+            </a>
         </div>
     </div>
 </div>
 
-<!-- Main Content -->
-<div class="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-slate-200">
-    <div class="max-w-xl mx-auto">
-        <div class="text-left mb-8 space-y-4 text-slate-600">
-            <h3 class="text-lg font-semibold text-slate-800">Instructions</h3>
-            <ol class="list-decimal list-inside space-y-2">
-                <li>Take a blank piece of paper and a dark pen.</li>
-                <li>Draw a continuous spiral starting from the center and moving outward.</li>
-                <li>Snap a clear, well-lit photo of the drawing and upload it below.</li>
-            </ol>
-        </div>
-
-        <form
-            action="{{ url_for('upload_spiral', session_id=session_record.id) }}"
-            method="POST"
-            enctype="multipart/form-data">
-            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl">
+<!-- Main Test Card -->
+<div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+    <form
+        id="spiralForm"
+        method="POST"
+        action="{{ url_for('upload_spiral', session_id=session_record.id) }}"
+        enctype="multipart/form-data">
+        <!-- Upload Area -->
+        <div id="uploadArea" class="space-y-6">
+            <p class="text-slate-500">Upload a clear, well-lit photo of a spiral drawn on physical paper.</p>
+            <div
+                id="drop-zone"
+                class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
                 <div class="space-y-1 text-center">
                     <svg
                         class="mx-auto h-12 w-12 text-slate-400"
@@ -46,90 +42,116 @@
                             stroke-linecap="round"
                             stroke-linejoin="round" />
                     </svg>
-                    <div class="flex justify-center text-sm text-slate-600">
-                        <label
-                            for="file-upload"
-                            class="relative cursor-pointer bg-white rounded-md font-medium text-teal-600 hover:text-teal-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-teal-500">
+                    <div class="flex text-sm text-slate-600 justify-center">
+                        <span class="relative font-medium text-teal-600 hover:text-teal-500">
                             <span>Upload a file</span>
-                            <input id="file-upload" name="image" type="file" class="sr-only" accept=".png,.jpg,.jpeg" />
-                        </label>
+                            <input
+                                id="imageFile"
+                                name="image"
+                                type="file"
+                                class="sr-only"
+                                accept="image/jpeg,image/png,image/jpg" />
+                        </span>
                         <p class="pl-1">or drag and drop</p>
                     </div>
-                    <p class="text-xs text-slate-500">PNG, JPG, JPEG up to 10MB</p>
+                    <p class="text-xs text-slate-500" id="file-name-display">PNG, JPG up to 10MB</p>
                 </div>
             </div>
+        </div>
 
-            <!-- Image Preview Container (hidden by default) -->
-            <div
-                id="imagePreviewContainer"
-                class="hidden mt-6 p-4 border border-slate-200 rounded-lg bg-slate-50 max-w-lg mx-auto">
-                <p class="text-sm font-semibold text-slate-800 mb-3">Image Preview</p>
-                <div class="flex justify-center">
-                    <img
-                        id="imagePreview"
-                        class="max-w-xs w-full border rounded-md shadow-sm bg-white"
-                        src=""
-                        alt="User's spiral drawing preview" />
-                </div>
-                <div class="mt-4 text-center">
-                    <button
-                        id="removeImageBtn"
-                        type="button"
-                        class="px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-transparent rounded-md hover:bg-red-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500">
-                        Remove Image
-                    </button>
-                </div>
+        <!-- Image Preview Container (hidden by default) -->
+        <div id="imagePreviewContainer" class="hidden mt-6 flex flex-col items-center">
+            <p class="text-sm font-semibold text-slate-800 mb-4 w-full text-left">Image Preview</p>
+            <div class="border border-slate-200 rounded-lg p-2 bg-slate-50 w-full flex justify-center">
+                <img id="imagePreview" class="max-h-64 object-contain rounded shadow-sm" alt="Spiral Preview" />
             </div>
 
-            <div class="mt-6 text-center">
+            <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4 w-full max-w-lg mx-auto">
                 <button
+                    id="discardImageBtn"
+                    type="button"
+                    class="w-full sm:w-1/2 px-6 py-3 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-xl hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-500 transition-colors">
+                    Discard & Try Again
+                </button>
+                <button
+                    id="submitImageBtn"
                     type="submit"
-                    class="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
-                    Analyze Drawing
+                    class="w-full sm:w-1/2 px-6 py-3 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-xl hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-500 transition-colors shadow-sm">
+                    Submit Drawing
                 </button>
             </div>
-        </form>
-    </div>
+        </div>
+    </form>
 </div>
 {% endblock %} {% block scripts %}
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        const imageUploadInput = document.getElementById("file-upload");
-        const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+        const dropZone = document.getElementById("drop-zone");
+        const imageInput = document.getElementById("imageFile");
+        const fileNameDisplay = document.getElementById("file-name-display");
+
+        const uploadArea = document.getElementById("uploadArea");
+        const previewContainer = document.getElementById("imagePreviewContainer");
         const imagePreview = document.getElementById("imagePreview");
-        const removeImageBtn = document.getElementById("removeImageBtn");
+        const discardBtn = document.getElementById("discardImageBtn");
+        const submitBtn = document.getElementById("submitImageBtn");
 
-        // Store the current URL to prevent memory leaks
-        let currentObjectUrl = null;
+        // UI Feedback for Drag & Drop
+        dropZone.addEventListener("click", () => imageInput.click());
 
-        imageUploadInput.addEventListener("change", () => {
-            const file = imageUploadInput.files[0];
-            if (file) {
-                // Revoke the previous object URL if one exists
-                if (currentObjectUrl) {
-                    URL.revokeObjectURL(currentObjectUrl);
-                }
+        dropZone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropZone.classList.add("border-teal-500", "bg-teal-50");
+        });
 
-                // Create a new object URL for the selected file
-                currentObjectUrl = URL.createObjectURL(file);
-                imagePreview.src = currentObjectUrl;
+        dropZone.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            dropZone.classList.remove("border-teal-500", "bg-teal-50");
+        });
 
-                // Show the preview container
-                imagePreviewContainer.classList.remove("hidden");
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropZone.classList.remove("border-teal-500", "bg-teal-50");
+            if (e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith("image/")) {
+                imageInput.files = e.dataTransfer.files;
+                handleImageSelect();
             }
         });
 
-        removeImageBtn.addEventListener("click", () => {
-            // Clear the file input and hide the preview
-            imageUploadInput.value = "";
-            imagePreviewContainer.classList.add("hidden");
+        imageInput.addEventListener("change", handleImageSelect);
+
+        function handleImageSelect() {
+            if (imageInput.files && imageInput.files[0]) {
+                const file = imageInput.files[0];
+                fileNameDisplay.textContent = file.name;
+
+                // Use FileReader to display the image preview
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result;
+                    uploadArea.classList.add("hidden");
+                    previewContainer.classList.remove("hidden");
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Discard Button Logic
+        discardBtn.addEventListener("click", () => {
+            imageInput.value = ""; // Clear file input
+            fileNameDisplay.textContent = "PNG, JPG up to 10MB";
             imagePreview.src = "";
 
-            // Revoke the object URL to free up browser memory
-            if (currentObjectUrl) {
-                URL.revokeObjectURL(currentObjectUrl);
-                currentObjectUrl = null;
-            }
+            // Toggle Views
+            previewContainer.classList.add("hidden");
+            uploadArea.classList.remove("hidden");
+        });
+
+        // Optional UX improvement for submit
+        submitBtn.addEventListener("click", () => {
+            submitBtn.textContent = "Processing...";
+            submitBtn.classList.add("opacity-75", "cursor-not-allowed");
+            discardBtn.disabled = true;
         });
     });
 </script>
