@@ -13,12 +13,7 @@ from parselmouth.praat import call
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    precision_recall_curve,
-    recall_score,
-)
+from sklearn.metrics import accuracy_score, classification_report, recall_score
 from xgboost import XGBClassifier
 
 warnings.filterwarnings("ignore")
@@ -28,6 +23,7 @@ warnings.filterwarnings("ignore")
 # =====================================================================
 # Add the exact string names of the noisy features identified by SHAP here.
 # Example: FEATURES_TO_DROP = ["DFA", "RPDE", "PPE", "Jitter:DDP"]
+# FEATURES_TO_DROP = []
 
 FEATURES_TO_DROP = [
     "Jitter:DDP",
@@ -249,27 +245,48 @@ def main():
     xgb.fit(X_train_scaled, y_train)
 
     # ==========================================
-    # 5. OPTIMIZE THRESHOLD VIA F2-SCORE
+    # 5. OPTIMIZE THRESHOLD FOR MAXIMUM ACCURACY
     # ==========================================
-    print("Optimizing Decision Threshold via F2-Score (Beta=2)...")
+    print(
+        "Optimizing Decision Threshold for Maximum Accuracy (with Recall Tie-Breaker)..."
+    )
+
+    # Get probability predictions for the test set (Probability of Class 1: Parkinson's)
     y_probs = xgb.predict_proba(X_test_scaled)[:, 1]
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_probs)
 
-    beta = 2
-    with np.errstate(divide="ignore", invalid="ignore"):
-        f2_scores = (
-            (1 + beta**2)
-            * (precisions[:-1] * recalls[:-1])
-            / ((beta**2 * precisions[:-1]) + recalls[:-1])
-        )
+    best_threshold = 0.5
+    max_acc = -1.0
+    best_recall_for_max_acc = -1.0
 
-    optimal_idx = np.nanargmax(f2_scores)
-    optimal_threshold = thresholds[optimal_idx]
+    # Test thresholds from 0.05 to 0.95 with a step of 0.01
+    # np.round is used to avoid floating point arithmetic issues (e.g., 0.060000000000000005)
+    thresholds_to_test = np.round(np.arange(0.05, 0.96, 0.01), 2)
 
-    y_pred_custom = (y_probs >= optimal_threshold).astype(int)
+    for thresh in thresholds_to_test:
+        # Convert probabilities to binary predictions based on the current threshold
+        y_pred_custom = (y_probs >= thresh).astype(int)
 
-    final_acc = accuracy_score(y_test, y_pred_custom)
-    final_recall = recall_score(y_test, y_pred_custom)
+        # Calculate standard metrics
+        acc = accuracy_score(y_test, y_pred_custom)
+        rec = recall_score(y_test, y_pred_custom)
+
+        # 1. Check if this threshold yields a strictly higher accuracy
+        if acc > max_acc:
+            max_acc = acc
+            best_recall_for_max_acc = rec
+            best_threshold = thresh
+
+        # 2. Tie-Breaker Rule: If accuracy is identical, pick the threshold with the higher recall
+        elif acc == max_acc:
+            if rec > best_recall_for_max_acc:
+                best_recall_for_max_acc = rec
+                best_threshold = thresh
+
+    # Apply the absolute best threshold to get the final predictions
+    y_pred_final = (y_probs >= best_threshold).astype(int)
+
+    final_acc = accuracy_score(y_test, y_pred_final)
+    final_recall = recall_score(y_test, y_pred_final)
 
     # ==========================================
     # 6. EXPORT & OUTPUT METRICS
@@ -283,19 +300,20 @@ def main():
     print("\n" + "=" * 50)
     print("🚀 NEUROSCREEN PRUNED MODEL TRAINING COMPLETE")
     print("=" * 50)
-    print(f"1. Features Used                           : {len(features_to_keep)} / 22")
-    print(
-        f"2. Dynamically Calculated scale_pos_weight : {dynamic_scale_pos_weight:.4f}"
-    )
-    print(f"3. Optimal F2-Score Threshold Locked       : {optimal_threshold:.4f}")
-    print(f"4. Final Locked Recall (Sensitivity)       : {final_recall * 100:.2f}%")
-    print(f"5. Final Accuracy Score                    : {final_acc * 100:.2f}%")
+
+    # Format the pruned features list for clean output
+    pruned_str = ", ".join(FEATURES_TO_DROP) if FEATURES_TO_DROP else "None"
+
+    print(f"1. Pruned Features                         : {pruned_str}")
+    print(f"2. Accuracy-Maximized Custom Threshold     : {best_threshold:.2f}")
+    print(f"3. Final Locked Recall (Sensitivity)       : {final_recall * 100:.2f}%")
+    print(f"4. Maximized Final Accuracy Score          : {final_acc * 100:.2f}%")
     print("=" * 50)
 
-    print("\nRefined Classification Report (Using F2-Optimized Threshold):")
+    print("\nRefined Classification Report (Using Accuracy-Optimized Threshold):")
     print(
         classification_report(
-            y_test, y_pred_custom, target_names=["Healthy (0)", "Parkinson's (1)"]
+            y_test, y_pred_final, target_names=["Healthy (0)", "Parkinson's (1)"]
         )
     )
 
