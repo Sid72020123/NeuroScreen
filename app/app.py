@@ -236,7 +236,11 @@ def get_spiral_model():
     if _SPIRAL_MODEL is None:
         if os.path.exists(SPIRAL_MODEL_PATH):
             try:
-                _SPIRAL_MODEL = tf.keras.models.load_model(SPIRAL_MODEL_PATH)
+                # Load model without compiling to avoid warnings on optimizer state
+                # when only doing inference.
+                _SPIRAL_MODEL = tf.keras.models.load_model(
+                    SPIRAL_MODEL_PATH, compile=False
+                )
                 print(f"Successfully loaded spiral model from {SPIRAL_MODEL_PATH}")
             except Exception as e:
                 print(f"Error loading spiral model: {e}")
@@ -907,131 +911,138 @@ def upload_voice():
             os.remove(temp_path)
 
 
+def _preprocess_spiral_image(img_bytes):
+    """
+    Applies the strict preprocessing pipeline to an in-memory image.
+    This matches the training script to prevent training-serving skew.
+    Returns the processed tensor for the model and the base image for XAI.
+    """
+    # 1. Decode image from bytes.
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img_raw = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+
+    # 2. Convert to grayscale, handling various input formats (RGBA, BGR, GRAY).
+    if len(img_raw.shape) > 2 and img_raw.shape[2] == 4:
+        # Handle RGBA from canvas: blend alpha onto a white background first.
+        alpha_channel = img_raw[:, :, 3]
+        rgb_channels = img_raw[:, :, :3]
+        white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
+        alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
+        blended_img = (
+            rgb_channels * alpha_factor + white_background * (1 - alpha_factor)
+        ).astype(np.uint8)
+        img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
+    elif len(img_raw.shape) == 3:
+        # Handle standard BGR images.
+        img_gray = cv2.cvtColor(img_raw, cv2.COLOR_BGR2GRAY)
+    else:
+        # Assume it's already grayscale.
+        img_gray = img_raw
+
+    # 3. Apply a slight Gaussian Blur to remove pixel noise before thresholding.
+    blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
+
+    # 4. Use Otsu's Binarization to separate ink from background.
+    _, binary_img = cv2.threshold(
+        blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    # 5. Crop to the largest contour (the spiral) to remove edge artifacts.
+    contours, _ = cv2.findContours(
+        binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    cropped_binary_img = binary_img  # Default to the uncropped image
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        cropped_img = binary_img[y : y + h, x : x + w]
+        pad = 10
+        cropped_binary_img = cv2.copyMakeBorder(
+            cropped_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0
+        )
+
+    # 6. Resize to (224, 224) for the model input.
+    resized_img = cv2.resize(
+        cropped_binary_img, (224, 224), interpolation=cv2.INTER_AREA
+    )
+
+    # 7. Convert grayscale binary image back to 3-channel for MobileNetV2.
+    model_input_img = cv2.cvtColor(resized_img, cv2.COLOR_GRAY2RGB)
+
+    # 8. Expand dimensions and apply MobileNetV2 preprocessing.
+    # The `np.expand_dims` is critical to create the batch dimension (1, 224, 224, 3),
+    # which resolves Keras input shape warnings.
+    img_expanded = np.expand_dims(model_input_img, axis=0)
+    processed_img_tensor = tf.keras.applications.mobilenet_v2.preprocess_input(
+        img_expanded.astype(np.float32)
+    )
+
+    # For Grad-CAM, we need a 3-channel BGR image.
+    xai_base_img = cv2.cvtColor(cropped_binary_img, cv2.COLOR_GRAY2BGR)
+
+    return processed_img_tensor, xai_base_img
+
+
 @app.route("/upload_spiral/<int:session_id>", methods=["POST"])
 @login_required
 def upload_spiral(session_id):
     session_record = resolve_session(session_id)
     if session_record is None:
-        flash("That screening session could not be found.", "danger")
+        message = "That screening session could not be found."
+        if wants_json_response():
+            return jsonify({"success": False, "message": message}), 404
+        flash(message, "danger")
         return redirect(url_for("dashboard"))
 
     model = get_spiral_model()
     if model is None:
-        flash(
-            "Spiral analysis model is not available. Please check server logs.", "error"
-        )
+        message = "Spiral analysis model is not available. Please check server logs."
+        if wants_json_response():
+            return jsonify({"success": False, "message": message}), 503
+        flash(message, "error")
         return redirect(url_for("session_hub", session_id=session_id))
 
     img_bytes = None
-
-    # Case 1: Handle base64 encoded string from canvas
     if "canvas_data" in request.form and request.form.get("canvas_data"):
         base64_data = request.form.get("canvas_data")
         try:
-            # Strip the "data:image/png;base64," header
-            header, encoded = base64_data.split(",", 1)
+            _, encoded = base64_data.split(",", 1)
             img_bytes = base64.b64decode(encoded)
         except (ValueError, TypeError) as e:
-            flash(f"Invalid canvas data received: {e}", "error")
+            message = f"Invalid canvas data received: {e}"
+            if wants_json_response():
+                return jsonify({"success": False, "message": message}), 400
+            flash(message, "error")
             return redirect(url_for("spiral_test", session_id=session_id))
-
-    # Case 2: Handle uploaded file
     elif "image" in request.files:
         file = request.files["image"]
         if file and file.filename != "":
             img_bytes = file.read()
 
     if img_bytes is None:
-        flash("No image data received. Please draw a spiral or upload a file.", "error")
+        message = "No image data received. Please draw a spiral or upload a file."
+        if wants_json_response():
+            return jsonify({"success": False, "message": message}), 400
+        flash(message, "error")
         return redirect(url_for("spiral_test", session_id=session_id))
 
     try:
-        # --- Strict OpenCV Preprocessing Pipeline to fix Training-Serving Skew ---
+        # 1. Preprocess the image using the strict, centralized pipeline.
+        processed_img, xai_base_img = _preprocess_spiral_image(img_bytes)
 
-        # 1. Decode image from bytes.
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        img_raw = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
-
-        # 2. Convert to grayscale, handling various input formats (RGBA, BGR, GRAY).
-        if len(img_raw.shape) > 2 and img_raw.shape[2] == 4:
-            # Handle RGBA from canvas: blend alpha onto a white background first.
-            alpha_channel = img_raw[:, :, 3]
-            rgb_channels = img_raw[:, :, :3]
-            white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
-            alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
-            blended_img = (
-                rgb_channels * alpha_factor + white_background * (1 - alpha_factor)
-            ).astype(np.uint8)
-            img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
-        elif len(img_raw.shape) == 3:
-            # Handle standard BGR images.
-            img_gray = cv2.cvtColor(img_raw, cv2.COLOR_BGR2GRAY)
-        else:
-            # Assume it's already grayscale.
-            img_gray = img_raw
-
-        # 3. Apply a slight Gaussian Blur to remove pixel noise before thresholding.
-        blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
-
-        # 4. Use Otsu's Binarization to separate ink from background.
-        # This is more robust against noise amplification ("salt & pepper" static)
-        # than adaptive thresholding for this use case.
-        _, binary_img = cv2.threshold(
-            blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )
-
-        # 5. Crop to the largest contour (the spiral) to remove edge artifacts.
-        # Since we used THRESH_BINARY_INV, the spiral is white, and findContours
-        # will find it directly.
-        contours, _ = cv2.findContours(
-            binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-
-        cropped_binary_img = binary_img  # Default to the uncropped image
-        if contours:
-            # Find the largest contour by area, assuming it's the spiral drawing
-            largest_contour = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(largest_contour)
-
-            # Crop the image to the bounding box of the largest contour
-            cropped_img = binary_img[y : y + h, x : x + w]
-
-            # Add 10px black padding so the drawing isn't touching the image boundaries
-            pad = 10
-            cropped_binary_img = cv2.copyMakeBorder(
-                cropped_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0
-            )
-
-        # 6. Resize to (224, 224) for the model input.
-        resized_img = cv2.resize(
-            cropped_binary_img, (224, 224), interpolation=cv2.INTER_AREA
-        )
-
-        # 7. Convert grayscale binary image back to 3-channel for MobileNetV2.
-        model_input_img = cv2.cvtColor(resized_img, cv2.COLOR_GRAY2RGB)
-
-        # 8. Expand dimensions and apply MobileNetV2 preprocessing.
-        img_expanded = np.expand_dims(model_input_img, axis=0)
-        processed_img = tf.keras.applications.mobilenet_v2.preprocess_input(
-            img_expanded.astype(np.float32)
-        )
-
-        # --- Prediction (on correctly preprocessed image) ---
+        # 2. Perform prediction. The model output is a single probability (sigmoid).
         parkinsons_prob = model.predict(processed_img)[0][0]
-        # Convert to a risk score (0-100), where higher is higher risk.
-        spiral_score = round(parkinsons_prob * 100, 1)
+        spiral_score = round(float(parkinsons_prob) * 100, 1)
+        prediction = "High Risk" if parkinsons_prob >= 0.5 else "Low Risk"
 
-        # --- Explainable AI (Grad-CAM) ---
-        # For Grad-CAM, overlay the heatmap on the cropped, thresholded B/W image.
-        # It must be converted to BGR (3-channel) for cv2.addWeighted.
-        xai_base_img = cv2.cvtColor(cropped_binary_img, cv2.COLOR_GRAY2BGR)
+        # 3. Generate Explainable AI (Grad-CAM) heatmap.
         xai_image_url = generate_gradcam(
             processed_img, xai_base_img, model, session_id, "out_relu"
         )
 
-        # --- Generate Analysis Text & Database Update ---
+        # 4. Generate analysis text based on the risk score.
         spiral_analysis = []
-        # Logic is now based on risk score: high score = high risk.
         if spiral_score >= 50:
             spiral_analysis.append(
                 "Analysis indicates potential motor impairments. Irregular kinematics and micro-tremors may be present in the highlighted region."
@@ -1044,24 +1055,40 @@ def upload_spiral(session_id):
                 "The drawing shows stable motor control with smooth, consistent curvature."
             )
 
+        # 5. Update database record.
         session_record.spiral_score = spiral_score
         session_record.spiral_metrics = json.dumps(
             {"analysis": spiral_analysis, "xai_image_url": xai_image_url}
         )
         update_final_score(session_record)
         db.session.commit()
+
+        # 6. Return appropriate response (JSON for AJAX, redirect for form post).
+        redirect_url = url_for("session_hub", session_id=session_id)
+        if wants_json_response():
+            return jsonify(
+                {
+                    "success": True,
+                    "risk_probability": float(parkinsons_prob),
+                    "prediction": prediction,
+                    "redirect_url": redirect_url,
+                }
+            )
+
         flash(
             f"Spiral drawing analyzed successfully! Score: {spiral_score:.1f}%",
             "success",
         )
+        return redirect(redirect_url)
 
     except Exception as e:
         db.session.rollback()
         print(f"An error occurred during spiral analysis: {e}")
-        flash("An error occurred during image processing. Please try again.", "error")
+        message = "An error occurred during image processing. Please try again."
+        if wants_json_response():
+            return jsonify({"success": False, "message": message}), 500
+        flash(message, "error")
         return redirect(url_for("spiral_test", session_id=session_id))
-
-    return redirect(url_for("session_hub", session_id=session_id))
 
 
 @app.route("/history")
