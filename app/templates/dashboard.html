@@ -27,6 +27,15 @@
                     <p class="mt-1 text-slate-500">
                         Evaluate both Voice Acoustics and Motor Kinematics to generate a comprehensive risk assessment.
                     </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
+                            Average Accuracy: ~85.0%
+                        </span>
+                        <a href="{{ url_for('model_info') }}" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                            View Model Statistics &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
         </button>
@@ -46,19 +55,27 @@
             </p>
             {% if recent_session.voice_metrics %}
             <div class="mt-3 pt-3 border-t border-slate-100">
-                <p class="font-semibold text-xs text-slate-500 uppercase tracking-wider mb-2">Key Biomarkers</p>
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
-                        <p class="text-xs text-slate-500">spread2</p>
-                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('spread2')) if recent_session.voice_metrics.get('spread2') is not none else 'N/A' }}</p>
+                <div class="flex justify-between items-center mb-2">
+                    <p class="font-semibold text-xs text-slate-500 uppercase tracking-wider">Key Biomarkers</p>
+                    <span class="text-xs text-teal-600 font-bold bg-teal-50 px-2 py-1 rounded-full">Model Confidence: {{ "%.1f"|format([recent_session.voice_score, 100 - recent_session.voice_score]|max) }}%</span>
+                </div>
+                <div class="flex flex-col md:flex-row items-center gap-4">
+                    <div class="w-full md:w-1/2 grid grid-cols-1 gap-2">
+                        <div class="bg-slate-50 rounded p-2 flex justify-between items-center border border-slate-100">
+                            <p class="text-xs text-slate-500 font-semibold">spread2</p>
+                            <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('spread2')) if recent_session.voice_metrics.get('spread2') is not none else 'N/A' }}</p>
+                        </div>
+                        <div class="bg-slate-50 rounded p-2 flex justify-between items-center border border-slate-100">
+                            <p class="text-xs text-slate-500 font-semibold">D2</p>
+                            <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('D2')) if recent_session.voice_metrics.get('D2') is not none else 'N/A' }}</p>
+                        </div>
+                        <div class="bg-slate-50 rounded p-2 flex justify-between items-center border border-slate-100">
+                            <p class="text-xs text-slate-500 font-semibold">RPDE</p>
+                            <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('RPDE')) if recent_session.voice_metrics.get('RPDE') is not none else 'N/A' }}</p>
+                        </div>
                     </div>
-                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
-                        <p class="text-xs text-slate-500">D2</p>
-                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('D2')) if recent_session.voice_metrics.get('D2') is not none else 'N/A' }}</p>
-                    </div>
-                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
-                        <p class="text-xs text-slate-500">RPDE</p>
-                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('RPDE')) if recent_session.voice_metrics.get('RPDE') is not none else 'N/A' }}</p>
+                    <div class="w-full md:w-1/2 h-32 relative">
+                        <canvas id="recentRadarChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -83,4 +100,55 @@
         >
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if recent_session and recent_session.voice_metrics %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const ctx = document.getElementById('recentRadarChart').getContext('2d');
+        
+        // Normalize values for radar chart aesthetics (mapping loosely based on thresholds)
+        const spread2Raw = {{ recent_session.voice_metrics.get('spread2', 0) }};
+        const d2Raw = {{ recent_session.voice_metrics.get('D2', 0) }};
+        const rpdeRaw = {{ recent_session.voice_metrics.get('RPDE', 0) }};
+        
+        new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['spread2', 'D2', 'RPDE'],
+                datasets: [{
+                    label: 'Session Biomarkers',
+                    data: [spread2Raw * 5, d2Raw / 2, rpdeRaw * 2], // Visual normalization factor
+                    backgroundColor: 'rgba(20, 184, 166, 0.2)',
+                    borderColor: 'rgb(20, 184, 166)',
+                    pointBackgroundColor: 'rgb(20, 184, 166)',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(20, 184, 166)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        ticks: { display: false },
+                        grid: { color: '#f1f5f9' },
+                        pointLabels: { font: { size: 10, weight: 'bold' }, color: '#64748b' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function() { return 'Normalized Variance'; }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endif %}
 {% endblock %}

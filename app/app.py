@@ -945,6 +945,12 @@ def dashboard():
     )
 
 
+@app.route("/model_info")
+@login_required
+def model_info():
+    return render_template("model_info.html")
+
+
 @app.route("/session/", defaults={"session_id": None})
 @app.route("/session/<int:session_id>/")
 @login_required

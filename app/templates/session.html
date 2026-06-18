@@ -20,6 +20,11 @@
     <!-- Final Risk Assessment Banner -->
     {% if session_record.final_score != None %}
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8 text-center relative overflow-hidden">
+        <div class="absolute top-4 right-4">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 shadow-sm">
+                Ensemble Confidence: {{ "%.1f"|format([session_record.final_score, 100 - session_record.final_score]|max) }}%
+            </span>
+        </div>
         <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">
             Overall Neurological Risk Assessment
         </h2>
