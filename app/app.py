@@ -2,7 +2,6 @@ import json
 import os
 from datetime import datetime
 from io import BytesIO
-
 from zoneinfo import ZoneInfo
 import base64
 import cv2
@@ -11,6 +10,9 @@ from parselmouth.praat import call
 import joblib
 import tensorflow as tf
 import numpy as np
+import pandas as pd
+import librosa
+import nolds
 from flask import (
     Flask,
     abort,
@@ -47,18 +49,47 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 SAVED_MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
 SPIRAL_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "spiral_model.h5")
-VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "xgboost_combined_model.pkl")
-SCALER_PATH = os.path.join(SAVED_MODELS_DIR, "standard_scaler.pkl")
+VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "xgboost_pruned_model.pkl")
+VOICE_SCALER_PATH = os.path.join(SAVED_MODELS_DIR, "standard_scaler_pruned.pkl")
+CUSTOM_THRESHOLD = 0.39
 ALLOWED_AUDIO_EXTENSIONS = {"wav"}
-VOICE_FEATURE_COLUMNS = [
+
+ALL_22_FEATURES = [
     "MDVP:Fo(Hz)",
     "MDVP:Fhi(Hz)",
     "MDVP:Flo(Hz)",
     "MDVP:Jitter(%)",
+    "MDVP:Jitter(Abs)",
+    "MDVP:RAP",
+    "MDVP:PPQ",
+    "Jitter:DDP",
     "MDVP:Shimmer",
+    "MDVP:Shimmer(dB)",
+    "Shimmer:APQ3",
+    "Shimmer:APQ5",
+    "MDVP:APQ",
+    "Shimmer:DDA",
     "NHR",
     "HNR",
+    "RPDE",
+    "DFA",
+    "spread1",
+    "spread2",
+    "D2",
+    "PPE",
 ]
+
+FEATURES_TO_DROP = [
+    "Jitter:DDP",
+    "MDVP:PPQ",
+    "MDVP:Shimmer",
+    "MDVP:Shimmer(dB)",
+    "MDVP:Jitter(%)",
+]
+
+# This list is used for PDF report generation. It's now more comprehensive.
+VOICE_FEATURE_COLUMNS = ALL_22_FEATURES
+
 VOICE_ANALYSIS_THRESHOLDS = {
     # Using a more sensitive threshold based on UCI dataset characteristics
     "MDVP:Jitter(%)": 0.007,
@@ -171,22 +202,24 @@ _VOICE_SCALER = None
 
 
 def get_voice_dependencies():
-    """Loads and caches the XGBoost model and the StandardScaler."""
+    """Loads and caches the pruned XGBoost model and the corresponding StandardScaler."""
     global _VOICE_MODEL, _VOICE_SCALER
     if _VOICE_MODEL is None or _VOICE_SCALER is None:
         try:
             if os.path.exists(VOICE_MODEL_PATH):
                 _VOICE_MODEL = joblib.load(VOICE_MODEL_PATH)
-                print(f"Successfully loaded voice model from {VOICE_MODEL_PATH}")
+                print(f"Successfully loaded pruned voice model from {VOICE_MODEL_PATH}")
             else:
-                print(f"Warning: Voice model not found at {VOICE_MODEL_PATH}")
+                print(f"Warning: Pruned voice model not found at {VOICE_MODEL_PATH}")
                 _VOICE_MODEL = None
 
-            if os.path.exists(SCALER_PATH):
-                _VOICE_SCALER = joblib.load(SCALER_PATH)
-                print(f"Successfully loaded voice scaler from {SCALER_PATH}")
+            if os.path.exists(VOICE_SCALER_PATH):
+                _VOICE_SCALER = joblib.load(VOICE_SCALER_PATH)
+                print(
+                    f"Successfully loaded pruned voice scaler from {VOICE_SCALER_PATH}"
+                )
             else:
-                print(f"Warning: Voice scaler not found at {SCALER_PATH}")
+                print(f"Warning: Pruned voice scaler not found at {VOICE_SCALER_PATH}")
                 _VOICE_SCALER = None
         except Exception as e:
             print(f"Error loading voice dependencies: {e}")
@@ -214,41 +247,92 @@ def get_spiral_model():
 
 def extract_praat_features(filepath):
     """
-    Extracts the 7 core acoustic features using Parselmouth (Praat) to match
-    the XGBoost model's training data.
+    Extracts all 22 acoustic features using Parselmouth (Praat) and Nolds to match
+    the model's training data.
     """
     try:
         sound = parselmouth.Sound(filepath)
         pitch = sound.to_pitch()
+        y, sr = librosa.load(filepath, sr=None)
 
-        # Pitch Features
         mean_pitch = call(pitch, "Get mean", 0, 0, "Hertz")
         max_pitch = call(pitch, "Get maximum", 0, 0, "Hertz", "Parabolic")
         min_pitch = call(pitch, "Get minimum", 0, 0, "Hertz", "Parabolic")
 
-        # Jitter & Shimmer
         pulses = call([sound, pitch], "To PointProcess (cc)")
-        jitter = call(pulses, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
-        shimmer = call(
+        jitter_pct = call(pulses, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
+        jitter_abs = call(
+            pulses, "Get jitter (local, absolute)", 0, 0, 0.0001, 0.02, 1.3
+        )
+        rap = call(pulses, "Get jitter (rap)", 0, 0, 0.0001, 0.02, 1.3)
+        ppq = call(pulses, "Get jitter (ppq5)", 0, 0, 0.0001, 0.02, 1.3)
+        ddp = rap * 3
+
+        shimmer_pct = call(
             [sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6
         )
+        shimmer_db = call(
+            [sound, pulses], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6
+        )
+        apq3 = call([sound, pulses], "Get shimmer (apq3)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        apq5 = call([sound, pulses], "Get shimmer (apq5)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        apq11 = call(
+            [sound, pulses], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6
+        )
+        dda = apq3 * 3
 
-        # HNR & NHR
         harmonicity = sound.to_harmonicity_cc()
         hnr = call(harmonicity, "Get mean", 0, 0)
+        nhr = 10.0 ** (-hnr / 10.0) if hnr and not np.isnan(hnr) else 0.0
 
-        if hnr and not np.isnan(hnr):
-            nhr = 10.0 ** (-hnr / 10.0)
+        y_sub = y[:3000] if len(y) > 3000 else y
+        dfa = nolds.dfa(y_sub)
+        d2 = nolds.corr_dim(y_sub, emb_dim=2)
+        rpde = nolds.sampen(y_sub)
+
+        f0_values = pitch.selected_array["frequency"]
+        f0_voiced = f0_values[f0_values > 0]
+
+        if len(f0_voiced) > 0:
+            log_f0 = np.log(f0_voiced)
+            spread1 = np.std(log_f0)
+            spread2 = np.var(log_f0)
+            hist, bin_edges = np.histogram(log_f0, bins="fd", density=True)
+            p = hist * np.diff(bin_edges)
+            p = p[p > 0]
+            ppe = -np.sum(p * np.log2(p))
         else:
-            nhr = 0.0  # Or np.nan, handled later
+            spread1, spread2, ppe = 0.0, 0.0, 0.0
 
-        # Return in the exact order the model was trained on
-        return [mean_pitch, max_pitch, min_pitch, jitter, shimmer, nhr, hnr]
+        return [
+            mean_pitch,
+            max_pitch,
+            min_pitch,
+            jitter_pct,
+            jitter_abs,
+            rap,
+            ppq,
+            ddp,
+            shimmer_pct,
+            shimmer_db,
+            apq3,
+            apq5,
+            apq11,
+            dda,
+            nhr,
+            hnr,
+            rpde,
+            dfa,
+            spread1,
+            spread2,
+            d2,
+            ppe,
+        ]
 
     except Exception as e:
         # Praat can fail on silent/corrupt files. Return NaNs for graceful failure.
         print(f"Error processing {filepath} with Parselmouth: {e}")
-        return [np.nan] * 7
+        return [np.nan] * 22
 
 
 def update_final_score(session_record):
@@ -749,7 +833,7 @@ def upload_voice():
             flash(message, "error")
             return redirect(url_for("voice_test", session_id=session_record.id))
 
-        # 2. Extract Praat features
+        # 2. Extract all 22 Praat features
         feature_values = extract_praat_features(temp_path)
         if any(np.isnan(val) for val in feature_values):
             message = "Could not extract valid audio features. The audio may be silent or corrupted."
@@ -758,35 +842,41 @@ def upload_voice():
             flash(message, "danger")
             return redirect(url_for("voice_test", session_id=session_record.id))
 
-        # 3. Scale features and predict
-        features_for_model = np.array([feature_values])
-        scaled_features = scaler.transform(features_for_model)
+        # 3. Convert to DataFrame, prune, scale, and predict
+        features_df = pd.DataFrame([feature_values], columns=ALL_22_FEATURES)
+        pruned_df = features_df.drop(columns=FEATURES_TO_DROP, errors="ignore")
+
+        scaled_features = scaler.transform(pruned_df)
         probability = model.predict_proba(scaled_features)[0][1]
+
+        prediction = "Parkinson's" if probability >= CUSTOM_THRESHOLD else "Healthy"
         voice_score = round(float(probability) * 100, 1)
 
         # 4. Store results
-        features_dict = dict(zip(VOICE_FEATURE_COLUMNS, feature_values))
+        # Store all 22 features for comprehensive reporting
+        features_dict = dict(zip(ALL_22_FEATURES, feature_values))
         session_record.voice_score = voice_score
         session_record.voice_metrics = json.dumps(features_dict, sort_keys=True)
         update_final_score(session_record)
         db.session.commit()
 
-        # 5. Return response
+        # 5. Return JSON response
         redirect_url = url_for("session_hub", session_id=session_record.id)
         if wants_json_response():
             return jsonify(
                 {
                     "success": True,
-                    "message": "Voice test saved.",
-                    "voice_score": voice_score,
-                    "voice_metrics": features_dict,
-                    "clinical_analysis": generate_clinical_analysis(features_dict),
+                    "risk_probability": float(probability),
+                    "custom_threshold_applied": CUSTOM_THRESHOLD,
+                    "prediction": prediction,
+                    "features_analyzed": len(pruned_df.columns),
                     "redirect_url": redirect_url,
                 }
             )
 
         flash("Voice test saved.", "success")
         return redirect(redirect_url)
+
     except Exception as exc:
         db.session.rollback()
         message = f"The voice sample could not be processed: {exc}"
@@ -794,6 +884,7 @@ def upload_voice():
             return jsonify({"success": False, "message": message}), 500
         flash(message, "danger")
         return redirect(url_for("voice_test", session_id=session_record.id))
+
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
