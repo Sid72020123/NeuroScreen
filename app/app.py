@@ -854,7 +854,11 @@ def upload_voice():
 
         # 4. Store results
         # Store all 22 features for comprehensive reporting
-        features_dict = dict(zip(ALL_22_FEATURES, feature_values))
+        # CRITICAL FIX: Convert numpy types (e.g., float32) to standard Python
+        # floats to ensure they are JSON serializable.
+        features_dict = {
+            key: float(value) for key, value in zip(ALL_22_FEATURES, feature_values)
+        }
         session_record.voice_score = voice_score
         session_record.voice_metrics = json.dumps(features_dict, sort_keys=True)
         update_final_score(session_record)
