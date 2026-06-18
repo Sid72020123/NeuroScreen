@@ -520,12 +520,9 @@ def build_report_pdf(session_record):
     pdf.set_text_color(15, 23, 42)
     pdf.set_fill_color(248, 250, 252)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(70, 22, "Header Image Placeholder", border=1, fill=True, align="C")
-    pdf.set_xy(90, pdf.get_y())
-    pdf.set_font("Helvetica", "", 11)
     pdf.multi_cell(
-        page_width - 70,
-        6,
+        page_width,
+        8,
         f"Session ID: #{session_data['session_number']}\nDate: {session_data['full_timestamp']}\nPatient: {session_record.user.username}",
         border=1,
         fill=True,
@@ -582,12 +579,25 @@ def build_report_pdf(session_record):
     pdf.set_font("Helvetica", "", 11)
 
     spiral_analysis_points = session_data.get("spiral_analysis", [])
+    original_image_url = session_data.get("spiral_original_image_url")
     xai_image_url = session_data.get("spiral_xai_image_url")
 
-    if xai_image_url:
-        image_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
-        if os.path.exists(image_path):
-            pdf.image(image_path, w=page_width / 2, x=pdf.get_x() + page_width / 4)
+    # Include side-by-side images if both exist
+    img_w = page_width / 2.2
+    if original_image_url and xai_image_url:
+        orig_path = os.path.join(BASE_DIR, original_image_url.lstrip("/"))
+        xai_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
+        if os.path.exists(orig_path) and os.path.exists(xai_path):
+            y_img = pdf.get_y()
+            pdf.image(orig_path, w=img_w, x=15, y=y_img)
+            pdf.image(xai_path, w=img_w, x=15 + img_w + 5, y=y_img)
+            pdf.set_y(y_img + img_w + 5)
+            pdf.ln(4)
+    # Fallback if only the heatmap exists
+    elif xai_image_url:
+        xai_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
+        if os.path.exists(xai_path):
+            pdf.image(xai_path, w=img_w, x=pdf.get_x() + (page_width - img_w) / 2)
             pdf.ln(4)
 
     if spiral_analysis_points:

@@ -71,17 +71,20 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                         {{ session.full_timestamp }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {% if session.voice_score is not none %}{{ "%.0f"|format(session.voice_score) }}%{% else
-                        %}Pending{% endif %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {% if session.voice_score is not none %}<span class="{{ session.voice_score_classes.text }}"
+                            >{{ "%.0f"|format(session.voice_score) }}%</span
+                        >{% else %}<span class="text-slate-400">Pending</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {% if session.spiral_score is not none %}{{ "%.0f"|format(session.spiral_score) }}%{% else
-                        %}Pending{% endif %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {% if session.spiral_score is not none %}<span class="{{ session.spiral_score_classes.text }}"
+                            >{{ "%.0f"|format(session.spiral_score) }}%</span
+                        >{% else %}<span class="text-slate-400">Pending</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
-                        {% if session.final_score is not none %}{{ "%.0f"|format(session.final_score) }}%{% else
-                        %}Pending{% endif %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold">
+                        {% if session.final_score is not none %}<span class="{{ session.final_score_classes.text }}"
+                            >{{ "%.0f"|format(session.final_score) }}%</span
+                        >{% else %}<span class="text-slate-400">Pending</span>{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <a
@@ -91,7 +94,7 @@
                         >
                         {% if session.final_score is not none %}
                         <a
-                            href="/api/generate_report/?session_id={{ session.id }}"
+                            href="{{ url_for('generate_report', session_id=session.id) }}"
                             class="text-teal-600 hover:text-teal-800"
                             >Download PDF</a
                         >

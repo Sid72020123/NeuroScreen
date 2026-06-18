@@ -40,6 +40,14 @@ We don't want the AI to be a "black box." To make its decisions clear, the app s
 
 ---
 
+## Features Designed for You and Your Doctor
+
+- **Track Your Progress Over Time:** NeuroScreen doesn't just look at a single snapshot. It keeps a history of all your past tests and draws a trend graph. This allows you to easily see if your risk score is remaining stable, improving, or worsening over the months.
+- **Downloadable Doctor Reports:** With a single click, you can generate a professional, formatted PDF report of your test results. This PDF includes all your voice measurements, your risk scores, and the side-by-side images of your spiral drawing and the AI heatmap. You can easily print this out or email it to your neurologist for a follow-up conversation.
+- **Side-by-Side Image Review:** When looking at your results, the app displays your original, normal drawing right next to the AI's "Heatmap" version. This makes it incredibly easy to see exactly what part of your drawing triggered the AI's warning.
+
+---
+
 ## Important Design Choices
 
 We made three very important technical decisions to make sure the app is reliable and clinically valid.

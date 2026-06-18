@@ -93,13 +93,17 @@ The trained models are deployed within a Flask web application that provides a u
     - **Purpose:** These functions load the XGBoost model, StandardScaler, and the TensorFlow/Keras model into memory upon application startup.
     - **Mechanism:** They use global variables to cache the models, preventing the high latency of reloading them from disk on every user request.
 
+- **Authentication & Security**
+    - **Purpose:** Manages user accounts and secures patient data.
+    - **Mechanism:** Implements `flask_login` with `werkzeug.security` password hashing. Custom logic ensures case-insensitive login evaluation to prevent common mobile input errors.
+
 - **`upload_voice()`**
     - **Purpose:** This Flask route handles the voice analysis workflow.
-    - **Mechanism:** It receives a `.wav` file from the user, saves it temporarily, and passes the path to `extract_praat_features`. The returned 7-feature array is then scaled using the loaded `StandardScaler` and passed to the XGBoost model's `predict_proba` method to get a risk score. The result is returned as a JSON response.
+    - **Mechanism:** It receives a `.wav` file, validates its length using `librosa.get_duration` to ensure mathematical stability, and passes it to `extract_praat_features`. The 22-feature array is pruned to the 17 optimal features, scaled, and evaluated by the XGBoost model.
 
 - **`upload_spiral(session_id)`**
     - **Purpose:** This route manages the spiral drawing analysis.
-    - **Mechanism:** It receives an image (either as a file upload or a base64 string from a canvas), then executes the exact same multi-step OpenCV preprocessing pipeline used during training. This strict adherence is critical to prevent training-serving skew. The processed image is then passed to the MobileNetV2 model for prediction.
+    - **Mechanism:** Executes the exact OpenCV preprocessing pipeline used during training to prevent training-serving skew. It also intercepts and saves the raw, full-color original image to provide a baseline for the clinician to compare against the AI's heatmap.
 
 - **`generate_gradcam(img_array, base_img, model, ...)`**
     - **Purpose:** Implements Explainable AI (XAI) for the spiral model.
@@ -109,9 +113,13 @@ The trained models are deployed within a Flask web application that provides a u
     - **Purpose:** Provides human-readable interpretation of the voice analysis results.
     - **Mechanism:** It compares the measured values for `MDVP:Jitter(%)` and `MDVP:Shimmer` against clinically-informed thresholds stored in the `VOICE_ANALYSIS_THRESHOLDS` dictionary. It then generates simple English sentences indicating whether the values are elevated or within the expected range.
 
-- **`build_report_pdf(session_record)`**
+- **`build_report_pdf(session_record)` & `generate_history_report()`**
     - **Purpose:** Creates a formal, downloadable PDF summary of a screening session.
-    - **Mechanism:** It uses the `FPDF` library to programmatically construct a PDF document. It populates the report with the final scores, a table of all measured voice metrics, the generated clinical analysis text, and the XAI heatmap image for the spiral test.
+    - **Mechanism:** Programmatically constructs PDF medical records. The individual report includes side-by-side original and XAI images, voice metric tables, and human-readable AI analysis. The history report aggregates a user's entire chronological screening history into a structured triage table.
+
+- **`serialize_session(session_record)` & Longitudinal Tracking**
+    - **Purpose:** Prepares database records for frontend rendering and calculates patient progression.
+    - **Mechanism:** Dynamically calculates a per-user session index (e.g., Session #1, #2) rather than exposing the global database primary key. This powers the `history()` route, which feeds a Chart.js instance to visualize the patient's longitudinal risk trend over time.
 
 ---
 

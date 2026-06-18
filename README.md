@@ -69,7 +69,19 @@ Relying on such filtered and smoothed data would introduce a high risk of **dang
 
 ---
 
-## 4. Tech Stack
+## 4. Clinical Dashboard & Backend Infrastructure
+
+The platform is wrapped in a robust, secure, and user-friendly Flask application built with a modern Tailwind CSS frontend. Key system-level features include:
+
+- **Longitudinal Patient Tracking:** Instead of just isolated tests, the system isolates user data and dynamically calculates per-user session numbers. The History Dashboard uses Chart.js to plot a longitudinal trend of the patient's final risk score over time, helping clinicians track neurodegenerative progression.
+- **Side-by-Side XAI Visualization:** The clinical review interface directly contrasts the true original, full-color uploaded drawing alongside the generated Grad-CAM heatmap. This direct comparison validates the model's focus area for the reviewing physician.
+- **Comprehensive PDF Reporting:** Using the `fpdf` library, the application generates formal, downloadable medical reports. Users can export individual session diagnostics (including biomarkers and side-by-side XAI images) or export their entire chronological session history as a formatted table.
+- **Security & State Management:** Implements secure user authentication with `werkzeug.security` password hashing, case-insensitive login validation to prevent mobile-keyboard bugs, and strict data isolation across user uploads.
+- **Dynamic UI Feedback:** The frontend dynamically color-codes all risk scores and clinical insights (Low Risk/Green, Moderate Risk/Yellow, High Risk/Red) to provide instant, at-a-glance triage capabilities.
+
+---
+
+## 5. Tech Stack
 
 - **Backend:** Flask, Python
 - **Machine Learning:** TensorFlow, Keras, Scikit-learn
@@ -79,7 +91,7 @@ Relying on such filtered and smoothed data would introduce a high risk of **dang
 
 ---
 
-## 5. Setup & Local Installation
+## 6. Setup & Local Installation
 
 Follow these steps to run the NeuroScreen application on your local machine.
 
