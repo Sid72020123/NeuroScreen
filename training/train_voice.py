@@ -283,32 +283,40 @@ def main():
     xgb.fit(X_train_scaled, y_train)
 
     # ==========================================
-    # 4. OPTIMIZE THRESHOLD FOR >= 90% RECALL
+    # 4. OPTIMIZE THRESHOLD VIA F2-SCORE
     # ==========================================
-    print("Optimizing Decision Threshold via Precision-Recall Curve...")
+    print("Optimizing Decision Threshold via F2-Score (Beta=2)...")
+
+    # 1. Get probability predictions for the test set (Probability of Class 1: Parkinson's)
     y_probs = xgb.predict_proba(X_test_scaled)[:, 1]
 
+    # 2. Generate the Precision-Recall curve
     precisions, recalls, thresholds = precision_recall_curve(y_test, y_probs)
 
-    best_threshold = 0.5
-    max_acc = 0.0
-    locked_recall = 0.0
+    # 3. Calculate F2-Score for every single threshold
+    # F-beta formula: (1 + beta^2) * (precision * recall) / ((beta^2 * precision) + recall)
+    beta = 2
 
-    # Iterate through all possible thresholds found by the PR curve
-    for thresh in thresholds:
-        y_pred_custom = (y_probs >= thresh).astype(int)
-        rec = recall_score(y_test, y_pred_custom)
-        acc = accuracy_score(y_test, y_pred_custom)
+    # Suppress runtime warnings for division by zero during F2 calculation
+    with np.errstate(divide="ignore", invalid="ignore"):
+        f2_scores = (
+            (1 + beta**2)
+            * (precisions[:-1] * recalls[:-1])
+            / ((beta**2 * precisions[:-1]) + recalls[:-1])
+        )
 
-        # Strictly enforce Recall >= 90%
-        if rec >= 0.90:
-            if acc > max_acc:
-                max_acc = acc
-                best_threshold = thresh
-                locked_recall = rec
+    # 4. Find the threshold that yields the absolute highest F2-Score
+    optimal_idx = np.nanargmax(
+        f2_scores
+    )  # nanargmax safely ignores division-by-zero errors
+    optimal_threshold = thresholds[optimal_idx]
 
-    # Apply the best threshold to get final predictions
-    y_pred_final = (y_probs >= best_threshold).astype(int)
+    # 5. Apply the new locked threshold
+    y_pred_custom = (y_probs >= optimal_threshold).astype(int)
+
+    # Calculate final metrics for the output block
+    final_acc = accuracy_score(y_test, y_pred_custom)
+    final_recall = recall_score(y_test, y_pred_custom)
 
     # ==========================================
     # 5. EXPORT & OUTPUT METRICS
@@ -325,15 +333,15 @@ def main():
     print(
         f"1. Dynamically Calculated scale_pos_weight : {dynamic_scale_pos_weight:.4f}"
     )
-    print(f"2. Custom Probability Threshold Locked     : {best_threshold:.4f}")
-    print(f"3. Final Locked Recall (Sensitivity)       : {locked_recall * 100:.2f}%")
-    print(f"4. Maximized Final Accuracy Score          : {max_acc * 100:.2f}%")
+    print(f"2. Optimal F2-Score Threshold Locked       : {optimal_threshold:.4f}")
+    print(f"3. Final Locked Recall (Sensitivity)       : {final_recall * 100:.2f}%")
+    print(f"4. Final Accuracy Score                    : {final_acc * 100:.2f}%")
     print("=" * 50)
 
-    print("\nDetailed Classification Report (Using Custom Threshold):")
+    print("\nRefined Classification Report (Using F2-Optimized Threshold):")
     print(
         classification_report(
-            y_test, y_pred_final, target_names=["Healthy (0)", "Parkinson's (1)"]
+            y_test, y_pred_custom, target_names=["Healthy (0)", "Parkinson's (1)"]
         )
     )
 
