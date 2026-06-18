@@ -13,6 +13,10 @@ from sklearn.metrics import (
     auc,
     precision_recall_curve,
     average_precision_score,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
 )
 
 # Suppress warnings for a cleaner terminal output
@@ -92,7 +96,7 @@ def main():
     # =====================================================================
     # 📈 GRAPH 1: CONFUSION MATRIX
     # =====================================================================
-    print("Generating Confusion Matrix...")
+    print("Generating Graph 1: Confusion Matrix...")
     cm = confusion_matrix(y_test, y_pred_custom)
 
     plt.figure(figsize=(8, 6))
@@ -116,7 +120,6 @@ def main():
     plt.ylabel("True Clinical Diagnosis", fontsize=14, fontweight="bold", labelpad=10)
     plt.xlabel("Model Prediction", fontsize=14, fontweight="bold", labelpad=10)
 
-    # Ensure layout is tight so labels aren't cut off
     plt.tight_layout()
     plt.savefig("paper_confusion_matrix.png", dpi=300)
     plt.close()
@@ -124,7 +127,7 @@ def main():
     # =====================================================================
     # 📈 GRAPH 2: ROC CURVE
     # =====================================================================
-    print("Generating ROC Curve...")
+    print("Generating Graph 2: ROC Curve...")
     fpr, tpr, _ = roc_curve(y_test, y_probs)
     roc_auc = auc(fpr, tpr)
 
@@ -153,26 +156,24 @@ def main():
     # =====================================================================
     # 📈 GRAPH 3: PRECISION-RECALL CURVE
     # =====================================================================
-    print("Generating Precision-Recall Curve...")
-    precision, recall, _ = precision_recall_curve(y_test, y_probs)
+    print("Generating Graph 3: Precision-Recall Curve...")
+    precision_vals, recall_vals, thresholds_pr = precision_recall_curve(y_test, y_probs)
     ap_score = average_precision_score(y_test, y_probs)
 
     plt.figure(figsize=(8, 6))
     plt.plot(
-        recall,
-        precision,
+        recall_vals,
+        precision_vals,
         color="#9467bd",
         lw=2.5,
         label=f"PR Curve (AP = {ap_score:.3f})",
     )
 
     # Mark the operational point based on our custom threshold
-    # Find the closest threshold index to our CUSTOM_THRESHOLD
-    _, _, thresholds_pr = precision_recall_curve(y_test, y_probs)
     idx = np.argmin(np.abs(thresholds_pr - CUSTOM_THRESHOLD))
     plt.plot(
-        recall[idx],
-        precision[idx],
+        recall_vals[idx],
+        precision_vals[idx],
         marker="o",
         markersize=10,
         color="red",
@@ -191,16 +192,120 @@ def main():
     plt.close()
 
     # =====================================================================
-    # ✅ SUCCESS OUTPUT
+    # 📈 GRAPH 4: FEATURE IMPORTANCE (TOP 10)
     # =====================================================================
+    print("Generating Graph 4: Feature Importance Bar Chart...")
+    importances = model.feature_importances_
+    feature_names = X.columns
+
+    # Sort features by importance
+    indices = np.argsort(importances)[::-1]
+    top_n = min(10, len(feature_names))
+
+    top_indices = indices[:top_n]
+    top_importances = importances[top_indices]
+    top_features = [feature_names[i] for i in top_indices]
+
+    plt.figure(figsize=(10, 6))
+    sns.barplot(x=top_importances, y=top_features, palette="viridis")
+
+    plt.title(
+        "Top 10 Acoustic Biomarkers (XGBoost Feature Importance)",
+        fontsize=16,
+        fontweight="bold",
+        pad=15,
+    )
+    plt.xlabel("Relative Importance (Weight)", fontsize=14, fontweight="bold")
+    plt.ylabel("Acoustic Feature", fontsize=14, fontweight="bold")
+
+    plt.tight_layout()
+    plt.savefig("paper_feature_importance_native.png", dpi=300)
+    plt.close()
+
+    # =====================================================================
+    # 📈 GRAPH 5: THRESHOLD VS. PERFORMANCE
+    # =====================================================================
+    print("Generating Graph 5: Threshold vs. Performance Plot...")
+    thresholds_eval = np.linspace(0.0, 1.0, 100)
+    acc_scores = []
+    prec_scores = []
+    rec_scores = []
+
+    for t in thresholds_eval:
+        y_pred_t = (y_probs >= t).astype(int)
+        acc_scores.append(accuracy_score(y_test, y_pred_t))
+        prec_scores.append(precision_score(y_test, y_pred_t, zero_division=0))
+        rec_scores.append(recall_score(y_test, y_pred_t))
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(thresholds_eval, acc_scores, label="Accuracy", color="blue", lw=2)
+    plt.plot(thresholds_eval, prec_scores, label="Precision", color="green", lw=2)
+    plt.plot(
+        thresholds_eval, rec_scores, label="Recall (Sensitivity)", color="orange", lw=2
+    )
+
+    # Draw vertical line for the optimal custom threshold
+    plt.axvline(
+        x=CUSTOM_THRESHOLD,
+        color="red",
+        linestyle="--",
+        lw=2,
+        label=f"Optimal Threshold ({CUSTOM_THRESHOLD})",
+    )
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("Classification Probability Threshold", fontsize=14, fontweight="bold")
+    plt.ylabel("Score", fontsize=14, fontweight="bold")
+    plt.title(
+        "Model Performance Across Probability Thresholds",
+        fontsize=16,
+        fontweight="bold",
+        pad=15,
+    )
+    plt.legend(loc="lower left", fontsize=12, frameon=True, shadow=True)
+
+    plt.tight_layout()
+    plt.savefig("paper_threshold_tuning.png", dpi=300)
+    plt.close()
+
+    # =====================================================================
+    # 🧮 CALCULATE FINAL METRICS & PRINT MARKDOWN TABLE
+    # =====================================================================
+    # Extract True Negatives, False Positives, False Negatives, True Positives
+    tn, fp, fn, tp = cm.ravel()
+
+    final_accuracy = accuracy_score(y_test, y_pred_custom)
+    final_precision = precision_score(y_test, y_pred_custom, zero_division=0)
+    final_recall = recall_score(y_test, y_pred_custom)
+    final_specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    final_f1 = f1_score(y_test, y_pred_custom)
+
     print("\n" + "=" * 60)
-    print("✅ SUCCESS! All 3 high-resolution graphs have been generated.")
+    print("✅ SUCCESS! All 5 high-resolution graphs have been generated.")
     print("=" * 60)
     print("Saved files in current directory:")
-    print(" 1. paper_confusion_matrix.png (300 DPI)")
-    print(" 2. paper_roc_curve.png        (300 DPI)")
-    print(" 3. paper_precision_recall.png (300 DPI)")
-    print("Ready for academic publication!")
+    print(" 1. paper_confusion_matrix.png          (300 DPI)")
+    print(" 2. paper_roc_curve.png                 (300 DPI)")
+    print(" 3. paper_precision_recall.png          (300 DPI)")
+    print(" 4. paper_feature_importance_native.png (300 DPI)")
+    print(" 5. paper_threshold_tuning.png          (300 DPI)")
+    print("\n📋 COPYABLE MARKDOWN TABLE FOR ACADEMIC PAPER:")
+    print("-" * 60)
+
+    markdown_table = f"""
+| Metric | Score | Description |
+| :--- | :--- | :--- |
+| **Accuracy** | {final_accuracy * 100:.2f}% | Overall correctness of the model |
+| **Sensitivity (Recall)** | {final_recall * 100:.2f}% | Ability to correctly identify Parkinson's |
+| **Specificity** | {final_specificity * 100:.2f}% | Ability to correctly identify Healthy patients |
+| **Precision (PPV)** | {final_precision * 100:.2f}% | Accuracy of positive Parkinson's predictions |
+| **F1-Score** | {final_f1 * 100:.2f}% | Harmonic mean of Precision and Recall |
+
+*Note: Metrics evaluated on the test set using an optimized clinical probability threshold of {CUSTOM_THRESHOLD}.*
+"""
+    print(markdown_table.strip())
+    print("-" * 60)
 
 
 if __name__ == "__main__":

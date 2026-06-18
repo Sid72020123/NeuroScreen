@@ -824,6 +824,19 @@ def upload_voice():
     try:
         audio_file.save(temp_path)
 
+        # --- DURATION VALIDATION ---
+        # Use librosa to check audio length before processing. This prevents
+        # downstream errors in feature extraction for very short clips.
+        duration = librosa.get_duration(path=temp_path)
+        if duration < 3.0:
+            message = "Audio recording too short. Please upload a continuous vocal sample of at least 3 seconds for accurate clinical analysis."
+            if wants_json_response():
+                # Return a specific error format as requested for this validation step.
+                return jsonify({"status": "error", "message": message}), 400
+            # Fallback for non-JS form submissions.
+            flash(message, "danger")
+            return redirect(url_for("voice_test", session_id=session_record.id))
+
         # 1. Load model and scaler
         model, scaler = get_voice_dependencies()
         if model is None or scaler is None:
