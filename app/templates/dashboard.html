@@ -1,71 +1,67 @@
 {% extends 'base.html' %} {% block title %}Dashboard - NeuroScreen{% endblock %} {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <header class="mb-10">
-        <h1 class="text-3xl font-bold leading-tight text-slate-900">Welcome, {{ current_user.username }}</h1>
-        <p class="mt-1 text-lg text-slate-500">Ready to begin a new screening or review past results?</p>
-    </header>
+<header class="mb-10">
+    <h1 class="text-3xl font-bold leading-tight text-slate-900">Welcome, {{ current_user.username }}</h1>
+    <p class="mt-1 text-lg text-slate-500">Ready to begin a new screening or review past results?</p>
+</header>
 
-    <!-- Start New Session Card -->
-    <div class="mb-10">
-        <form method="POST" action="{{ url_for('dashboard') }}">
-            <button
-                type="submit"
-                class="w-full text-left bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-slate-50">
-                <div class="flex flex-col sm:flex-row items-start sm:items-center">
-                    <div class="flex-shrink-0 bg-teal-100 text-teal-600 rounded-xl p-4 mb-4 sm:mb-0">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="h-10 w-10"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                    </div>
-                    <div class="sm:ml-6">
-                        <h2 class="text-2xl font-bold text-slate-800">Start New Screening Session</h2>
-                        <p class="mt-1 text-slate-500">
-                            Evaluate both Voice Acoustics and Motor Kinematics to generate a comprehensive risk
-                            assessment.
-                        </p>
-                    </div>
+<!-- Start New Session Card -->
+<div class="mb-10">
+    <form method="POST" action="{{ url_for('dashboard') }}">
+        <button
+            type="submit"
+            class="w-full text-left bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-slate-50">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center">
+                <div class="flex-shrink-0 bg-teal-100 text-teal-600 rounded-xl p-4 mb-4 sm:mb-0">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-10 w-10"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
                 </div>
-            </button>
-        </form>
-    </div>
-
-    <!-- Session Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h3 class="text-lg font-semibold text-slate-800">Recent Activity</h3>
-            {% if recent_session %}
-            <div class="mt-4 space-y-2 text-sm text-slate-600">
-                <p><strong>Last Session:</strong> {{ recent_session.full_timestamp }}</p>
-                <p>
-                    <strong>Final Score:</strong>
-                    <span class="font-bold text-slate-800">{{ recent_session.final_text }}</span>
-                </p>
-                <a
-                    href="{{ url_for('session_hub', session_id=recent_session.id) }}"
-                    class="inline-block mt-2 font-medium text-teal-600 hover:text-teal-500"
-                    >View Session &rarr;</a
-                >
+                <div class="sm:ml-6">
+                    <h2 class="text-2xl font-bold text-slate-800">Start New Screening Session</h2>
+                    <p class="mt-1 text-slate-500">
+                        Evaluate both Voice Acoustics and Motor Kinematics to generate a comprehensive risk assessment.
+                    </p>
+                </div>
             </div>
-            {% else %}
-            <p class="mt-4 text-sm text-slate-500">No sessions recorded yet.</p>
-            {% endif %}
-        </div>
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h3 class="text-lg font-semibold text-slate-800">Session History</h3>
-            <p class="mt-4 text-sm text-slate-600">
-                You have completed <span class="font-bold text-slate-800">{{ total_sessions }}</span> screening(s) in
-                total.
+        </button>
+    </form>
+</div>
+
+<!-- Session Summary -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h3 class="text-lg font-semibold text-slate-800">Recent Activity</h3>
+        {% if recent_session %}
+        <div class="mt-4 space-y-2 text-sm text-slate-600">
+            <p><strong>Last Session:</strong> {{ recent_session.full_timestamp }}</p>
+            <p>
+                <strong>Final Score:</strong>
+                <span class="font-bold text-slate-800">{{ recent_session.final_text }}</span>
             </p>
-            <a href="{{ url_for('history') }}" class="inline-block mt-2 font-medium text-teal-600 hover:text-teal-500"
-                >View All History &rarr;</a
+            <a
+                href="{{ url_for('session_hub', session_id=recent_session.id) }}"
+                class="inline-block mt-2 font-medium text-teal-600 hover:text-teal-500"
+                >View Session &rarr;</a
             >
         </div>
+        {% else %}
+        <p class="mt-4 text-sm text-slate-500">No sessions recorded yet.</p>
+        {% endif %}
+    </div>
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h3 class="text-lg font-semibold text-slate-800">Session History</h3>
+        <p class="mt-4 text-sm text-slate-600">
+            You have completed <span class="font-bold text-slate-800">{{ total_sessions }}</span> screening(s) in total.
+        </p>
+        <a href="{{ url_for('history') }}" class="inline-block mt-2 font-medium text-teal-600 hover:text-teal-500"
+            >View All History &rarr;</a
+        >
     </div>
 </div>
 {% endblock %}

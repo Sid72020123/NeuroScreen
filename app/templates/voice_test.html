@@ -1,106 +1,124 @@
 {% extends 'base.html' %} {% block title %}Voice Acoustics Test - NeuroScreen{% endblock %} {% block content %}
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-    <!-- Header -->
-    <div class="pb-6 border-b border-slate-200 mb-8">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <h1 class="text-3xl font-bold text-slate-900">Voice Acoustics Test</h1>
-                <p class="mt-1 text-slate-500">Session ID: {{ session_record.id }}</p>
-            </div>
-            <div class="mt-4 sm:mt-0">
-                <a
-                    href="{{ url_for('session_hub', session_id=session_record.id) }}"
-                    class="text-sm font-medium text-teal-600 hover:text-teal-500"
-                    >&larr; Back to Session Hub</a
-                >
-            </div>
+<!-- Header -->
+<div class="pb-6 border-b border-slate-200 mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-900">Voice Acoustics Test</h1>
+            <p class="mt-1 text-slate-500">Session ID: {{ session_record.id }}</p>
+        </div>
+        <div class="mt-4 sm:mt-0">
+            <a
+                href="{{ url_for('session_hub', session_id=session_record.id) }}"
+                class="text-sm font-medium text-teal-600 hover:text-teal-500"
+                >&larr; Back to Session Hub</a
+            >
         </div>
     </div>
+</div>
 
-    <!-- Main Test Card -->
-    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
-        <!-- Tab Navigation -->
-        <div class="border-b border-slate-200">
-            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button
-                    id="tab-record"
-                    class="border-teal-500 text-teal-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
-                    aria-current="page">
-                    Record in Browser
-                </button>
-                <button
-                    id="tab-upload"
-                    class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    Upload .WAV File
-                </button>
-            </nav>
+<!-- Main Test Card -->
+<div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+    <!-- Tab Navigation -->
+    <div class="border-b border-slate-200">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <button
+                id="tab-record"
+                class="border-teal-500 text-teal-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                aria-current="page">
+                Record in Browser
+            </button>
+            <button
+                id="tab-upload"
+                class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Upload .WAV File
+            </button>
+        </nav>
+    </div>
+
+    <form id="voiceForm" class="mt-8" enctype="multipart/form-data" data-upload-url="{{ url_for('upload_voice') }}">
+        <input type="hidden" id="sessionId" name="session_id" value="{{ session_record.id }}" />
+        <input type="file" id="audioFile" name="file" class="hidden" accept="audio/wav,.wav" />
+
+        <!-- Tab Panel 1: Record in Browser -->
+        <div id="panel-record" class="space-y-6">
+            <p class="text-slate-500">Press the button, allow microphone access, and speak clearly for 5 seconds.</p>
+            <div
+                class="flex flex-col items-center justify-center bg-slate-50 rounded-xl p-8 text-center border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Countdown</p>
+                <p id="countdownText" class="text-6xl font-bold text-teal-600 mt-2">5</p>
+            </div>
+            <button
+                id="startButton"
+                type="button"
+                class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                Start Microphone
+            </button>
         </div>
 
-        <form id="voiceForm" class="mt-8" enctype="multipart/form-data" data-upload-url="{{ url_for('upload_voice') }}">
-            <input type="hidden" id="sessionId" name="session_id" value="{{ session_record.id }}" />
-            <input type="file" id="audioFile" name="file" class="hidden" accept="audio/wav,.wav" />
-
-            <!-- Tab Panel 1: Record in Browser -->
-            <div id="panel-record" class="space-y-6">
-                <p class="text-slate-500">
-                    Press the button, allow microphone access, and speak clearly for 5 seconds.
-                </p>
-                <div
-                    class="flex flex-col items-center justify-center bg-slate-50 rounded-xl p-8 text-center border border-slate-200">
-                    <p class="text-sm font-medium text-slate-500">Countdown</p>
-                    <p id="countdownText" class="text-6xl font-bold text-teal-600 mt-2">5</p>
-                </div>
-                <button
-                    id="startButton"
-                    type="button"
-                    class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
-                    Start Microphone
-                </button>
-            </div>
-
-            <!-- Tab Panel 2: Upload File -->
-            <div id="panel-upload" class="hidden space-y-6">
-                <p class="text-slate-500">
-                    Drag and drop a .WAV file into the area below, or click to select a file from your computer.
-                </p>
-                <div
-                    id="drop-zone"
-                    class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer">
-                    <div class="space-y-1 text-center">
-                        <svg
-                            class="mx-auto h-12 w-12 text-slate-400"
-                            stroke="currentColor"
-                            fill="none"
-                            viewBox="0 0 48 48"
-                            aria-hidden="true">
-                            <path
-                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round" />
-                        </svg>
-                        <div class="flex text-sm text-slate-600">
-                            <span class="relative font-medium text-teal-600 hover:text-teal-500">
-                                <span>Upload a file</span>
-                            </span>
-                            <p class="pl-1">or drag and drop</p>
-                        </div>
-                        <p class="text-xs text-slate-500" id="file-name-display">WAV up to 10MB</p>
+        <!-- Tab Panel 2: Upload File -->
+        <div id="panel-upload" class="hidden space-y-6">
+            <p class="text-slate-500">
+                Drag and drop a .WAV file into the area below, or click to select a file from your computer.
+            </p>
+            <div
+                id="drop-zone"
+                class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer">
+                <div class="space-y-1 text-center">
+                    <svg
+                        class="mx-auto h-12 w-12 text-slate-400"
+                        stroke="currentColor"
+                        fill="none"
+                        viewBox="0 0 48 48"
+                        aria-hidden="true">
+                        <path
+                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex text-sm text-slate-600">
+                        <span class="relative font-medium text-teal-600 hover:text-teal-500">
+                            <span>Upload a file</span>
+                        </span>
+                        <p class="pl-1">or drag and drop</p>
                     </div>
+                    <p class="text-xs text-slate-500" id="file-name-display">WAV up to 10MB</p>
                 </div>
+            </div>
+            <button
+                id="uploadButton"
+                type="button"
+                class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-slate-400 disabled:cursor-not-allowed"
+                disabled>
+                Submit Uploaded File
+            </button>
+        </div>
+
+        <!-- Audio Preview Container (hidden by default) -->
+        <div id="audioPreviewContainer" class="hidden mt-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+            <p class="text-sm font-semibold text-slate-800 mb-2">Audio Preview</p>
+            <audio id="audioPreview" controls class="w-full"></audio>
+            <div class="mt-4 flex justify-center items-center gap-x-4">
+                <!-- Discard is always an option -->
                 <button
-                    id="uploadButton"
+                    id="discardAudioBtn"
                     type="button"
-                    class="w-full flex justify-center items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-slate-400 disabled:cursor-not-allowed"
-                    disabled>
-                    Submit Uploaded File
+                    class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-md hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-500">
+                    Discard
+                </button>
+                <!-- This button is ONLY for submitting a new recording -->
+                <button
+                    id="submitRecordingBtn"
+                    type="button"
+                    class="hidden px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-500">
+                    Submit Recording
                 </button>
             </div>
+        </div>
 
-            <!-- Global Status Text -->
-            <p id="statusText" class="mt-6 text-center text-sm text-slate-500 min-h-[1.25rem]"></p>
-        </form>
-    </div>
+        <!-- Global Status Text -->
+        <p id="statusText" class="mt-6 text-center text-sm text-slate-500 min-h-[1.25rem]"></p>
+    </form>
 </div>
 {% endblock %} {% block scripts %}
 <script src="{{ url_for('static', filename='js/voice-test.js') }}"></script>

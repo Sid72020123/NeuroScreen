@@ -22,6 +22,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const startButton = document.getElementById("startButton");
     const countdownText = document.getElementById("countdownText");
 
+    const audioPreviewContainer = document.getElementById("audioPreviewContainer");
+    const audioPreview = document.getElementById("audioPreview");
+    const discardAudioBtn = document.getElementById("discardAudioBtn");
+    const submitRecordingBtn = document.getElementById("submitRecordingBtn");
+
     // --- Tab Switching Logic ---
     tabRecord.addEventListener("click", () => {
         panelRecord.classList.remove("hidden");
@@ -65,9 +70,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (audioFileInput.files.length > 0) {
             fileNameDisplay.textContent = audioFileInput.files[0].name;
             uploadButton.disabled = false;
+            showAudioPreview(audioFileInput.files[0], false);
         } else {
             fileNameDisplay.textContent = "WAV up to 10MB";
             uploadButton.disabled = true;
+            hideAudioPreview();
         }
     }
 
@@ -82,8 +89,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Browser Recording Logic ---
     let audioContext, mediaStream, processorNode, sourceNode, silenceNode;
+    let recordedBlob = null;
+    let currentAudioObjectUrl = null;
     let audioChunks = [];
     let countdownTimer = null;
+
+    /**
+     * Shows the audio preview player for a given File or Blob.
+     * @param {Blob|File} blobOrFile The audio data to preview.
+     * @param {boolean} isRecording True if the source is a new recording, false if it's a file upload.
+     */
+    function showAudioPreview(blobOrFile, isRecording) {
+        if (currentAudioObjectUrl) {
+            URL.revokeObjectURL(currentAudioObjectUrl);
+        }
+        currentAudioObjectUrl = URL.createObjectURL(blobOrFile);
+        audioPreview.src = currentAudioObjectUrl;
+        audioPreviewContainer.classList.remove("hidden");
+
+        // Show the correct submit button based on context
+        submitRecordingBtn.classList.toggle("hidden", !isRecording);
+        uploadButton.classList.toggle("hidden", isRecording);
+    }
+
+    function hideAudioPreview() {
+        audioPreviewContainer.classList.add("hidden");
+        audioPreview.src = "";
+        if (currentAudioObjectUrl) {
+            URL.revokeObjectURL(currentAudioObjectUrl);
+            currentAudioObjectUrl = null;
+        }
+    }
 
     function writeString(view, offset, str) {
         for (let i = 0; i < str.length; i++) {
@@ -131,7 +167,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return merged;
     }
 
-    async function stopAndUpload() {
+    /**
+     * Stops the recording, creates a Blob, and displays it in the preview player.
+     * This function NO LONGER automatically uploads.
+     */
+    async function stopRecordingAndShowPreview() {
         if (countdownTimer) {
             clearInterval(countdownTimer);
             countdownTimer = null;
@@ -149,15 +189,12 @@ document.addEventListener("DOMContentLoaded", () => {
         mediaStream.getTracks().forEach((track) => track.stop());
 
         const samples = mergeBuffers(audioChunks);
-        const wavBlob = encodeWav(samples, audioContext.sampleRate);
+        recordedBlob = encodeWav(samples, audioContext.sampleRate);
         if (audioContext.state !== "closed") {
             await audioContext.close();
         }
 
-        const formData = new FormData();
-        formData.append("session_id", sessionId);
-        formData.append("file", wavBlob, "recording.wav");
-        submitFormData(formData, startButton, "Start Microphone");
+        showAudioPreview(recordedBlob, true);
     }
 
     async function startRecording() {
@@ -166,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
             startButton.disabled = true;
             startButton.textContent = "Listening...";
             let countdownSeconds = 5;
+            startButton.classList.add("hidden"); // Hide start button during countdown
             countdownText.textContent = String(countdownSeconds);
 
             mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -188,7 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 countdownSeconds -= 1;
                 countdownText.textContent = String(Math.max(countdownSeconds, 0));
                 if (countdownSeconds <= 0) {
-                    stopAndUpload();
+                    stopRecordingAndShowPreview();
                 }
             }, 1000);
         } catch (error) {
@@ -196,9 +234,36 @@ document.addEventListener("DOMContentLoaded", () => {
             statusText.textContent = "Microphone permission was not granted or an error occurred.";
             startButton.disabled = false;
             startButton.textContent = "Start Microphone";
+            startButton.classList.remove("hidden");
         }
     }
     startButton.addEventListener("click", startRecording);
+
+    // --- New Event Listeners for Preview Controls ---
+    submitRecordingBtn.addEventListener("click", () => {
+        if (recordedBlob) {
+            const formData = new FormData();
+            formData.append("session_id", sessionId);
+            formData.append("file", recordedBlob, "recording.wav");
+            submitFormData(formData, submitRecordingBtn, "Submit Recording");
+        }
+    });
+
+    discardAudioBtn.addEventListener("click", () => {
+        hideAudioPreview();
+
+        // Reset file upload state
+        audioFileInput.value = "";
+        fileNameDisplay.textContent = "WAV up to 10MB";
+        uploadButton.disabled = true;
+        uploadButton.classList.remove("hidden");
+
+        // Reset recording state
+        recordedBlob = null;
+        startButton.disabled = false;
+        startButton.classList.remove("hidden");
+        startButton.textContent = "Start Microphone";
+    });
 
     // --- Shared Form Submission Logic ---
     async function submitFormData(formData, buttonElement, buttonText) {
@@ -212,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: formData,
                 headers: { "X-Requested-With": "XMLHttpRequest" },
             });
-            const payload = await response.json();
+            const payload = await response.json(); // Handles both success and error JSON from Flask
             if (!response.ok || !payload.success) {
                 throw new Error(payload.message || "The sample could not be processed.");
             }

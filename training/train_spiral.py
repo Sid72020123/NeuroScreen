@@ -1,14 +1,14 @@
 """
 train_spiral.py
 
-A complete, standalone script to train a Parkinson's disease screening model 
-using spiral drawing images. This script uses TensorFlow/Keras and MobileNetV2 
+A complete, standalone script to train a Parkinson's disease screening model
+using spiral drawing images. This script uses TensorFlow/Keras and MobileNetV2
 transfer learning, addressing class imbalance and applying safe data augmentations.
 It features a strict OpenCV preprocessing pipeline to eliminate training-serving skew
 and utilizes a Two-Phase Fine-Tuning strategy to maximize accuracy.
 
-Author: Expert Deep Learning & CV Engineer
-Target: NeuroScreen Web App (Flask + TensorFlow)
+Author: Senior Python Machine Learning Engineer
+Target: NeuroScreen Web App (Flask + TensorFlow) - ASEP-2 Project
 """
 
 import os
@@ -41,6 +41,7 @@ BATCH_SIZE = 32
 PHASE_1_EPOCHS = 15
 PHASE_2_EPOCHS = 30
 
+
 # ==========================================
 # 1. STRICT OPENCV PREPROCESSING PIPELINE
 # ==========================================
@@ -72,13 +73,14 @@ def preprocess_image(image_path):
 
     return img_preprocessed
 
+
 def load_dataset():
     """
     Iterates through the dataset directories, processes images, and builds X and y arrays.
     Healthy = 0, Parkinson's = 1.
     """
     X, y = [], []
-    
+
     # Load Healthy (Class 0)
     if os.path.exists(HEALTHY_DIR):
         for file in os.listdir(HEALTHY_DIR):
@@ -103,17 +105,18 @@ def load_dataset():
 
     return np.array(X), np.array(y)
 
+
 # ==========================================
 # MAIN EXECUTION BLOCK
 # ==========================================
 def main():
     print("Loading and preprocessing dataset...")
     X, y = load_dataset()
-    
+
     if len(X) == 0:
         print("Error: No images loaded. Please check your dataset directories.")
         return
-    
+
     print(f"Total images loaded: {len(X)}")
     print(f"Class distribution - Healthy: {np.sum(y==0)}, Parkinson's: {np.sum(y==1)}")
 
@@ -126,55 +129,51 @@ def main():
 
     # Compute class_weight to penalize minority class errors
     classes = np.unique(y_train)
-    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    weights = compute_class_weight(class_weight="balanced", classes=classes, y=y_train)
     class_weights = dict(zip(classes, weights))
     print(f"Computed Class Weights: {class_weights}")
 
-    # Safe, on-the-fly augmentation for training data
-    # Note: cval=0 because our background is black after THRESH_BINARY_INV
+    # Kinematic-Safe Data Augmentation for training data
+    # Upgraded to prevent overfitting on the small dataset
     train_datagen = ImageDataGenerator(
-        rotation_range=15,
-        width_shift_range=0.1,
-        height_shift_range=0.1,
-        zoom_range=0.1,
-        horizontal_flip=False,   # PROHIBITED
-        vertical_flip=False,     # PROHIBITED
-        fill_mode='constant',
-        cval=0                   
+        rotation_range=10,  # Only slight rotations
+        zoom_range=0.05,  # Very minor scaling
+        horizontal_flip=True,  # Enabled for kinematic-safe augmentation
+        vertical_flip=True,  # Enabled for kinematic-safe augmentation
+        fill_mode="nearest",  # Upgraded fill mode
     )
-    
-    # Test data should NOT be augmented
+
+    # Test data should NOT be augmented (strictly rescale-only/passthrough)
+    # Note: Rescaling is already handled by `preprocess_input` in the load_dataset phase
     test_datagen = ImageDataGenerator()
 
     # ==========================================
     # 3. PHASE 1 TRAINING (WARM-UP)
     # ==========================================
     print("\n--- Starting Phase 1: Warm-up Training ---")
-    
+
     # Load MobileNetV2 without top classification layer
     base_model = MobileNetV2(
-        weights='imagenet', 
-        include_top=False, 
-        input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3)
+        weights="imagenet", include_top=False, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3)
     )
-    
+
     # Freeze the entire base model
     base_model.trainable = False
 
     # Add custom classification head
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
-    x = Dense(128, activation='relu', kernel_regularizer=l2(0.01))(x)
+    x = Dense(128, activation="relu", kernel_regularizer=l2(0.01))(x)
     x = Dropout(0.5)(x)
-    predictions = Dense(1, activation='sigmoid')(x)
+    predictions = Dense(1, activation="sigmoid")(x)
 
     model = Model(inputs=base_model.input, outputs=predictions)
 
     # Compile with Adam(learning_rate=1e-3)
     model.compile(
         optimizer=Adam(learning_rate=1e-3),
-        loss='binary_crossentropy',
-        metrics=['accuracy']
+        loss="binary_crossentropy",
+        metrics=["accuracy"],
     )
 
     # Train for 15 epochs
@@ -183,42 +182,35 @@ def main():
         validation_data=test_datagen.flow(X_test, y_test, batch_size=BATCH_SIZE),
         epochs=PHASE_1_EPOCHS,
         class_weight=class_weights,
-        verbose=1
+        verbose=1,
     )
 
     # ==========================================
     # 4. PHASE 2 TRAINING (DEEP FINE-TUNING)
     # ==========================================
     print("\n--- Starting Phase 2: Deep Fine-Tuning ---")
-    
+
     # Unfreeze the base_model
     base_model.trainable = True
 
-    # Iterate through the layers and freeze all EXCEPT the top 20 layers
-    for layer in base_model.layers[:-20]:
+    # Iterate through the layers and freeze all EXCEPT the top 50 layers (Upgraded from 20)
+    for layer in base_model.layers[:-50]:
         layer.trainable = False
 
     # Recompile with a severely reduced learning rate
     model.compile(
         optimizer=Adam(learning_rate=1e-5),
-        loss='binary_crossentropy',
-        metrics=['accuracy']
+        loss="binary_crossentropy",
+        metrics=["accuracy"],
     )
 
     # Setup Callbacks
     early_stopping = EarlyStopping(
-        monitor='val_loss', 
-        patience=5, 
-        restore_best_weights=True,
-        verbose=1
+        monitor="val_loss", patience=5, restore_best_weights=True, verbose=1
     )
-    
+
     reduce_lr = ReduceLROnPlateau(
-        monitor='val_loss', 
-        factor=0.5, 
-        patience=2, 
-        min_lr=1e-7,
-        verbose=1
+        monitor="val_loss", factor=0.5, patience=2, min_lr=1e-7, verbose=1
     )
 
     # Train Phase 2 for up to 30 additional epochs
@@ -228,7 +220,7 @@ def main():
         epochs=PHASE_2_EPOCHS,
         class_weight=class_weights,
         callbacks=[early_stopping, reduce_lr],
-        verbose=1
+        verbose=1,
     )
 
     # ==========================================
@@ -241,25 +233,30 @@ def main():
     # Calculate standard metrics
     acc = accuracy_score(y_test, y_pred)
     print(f"\nOverall Accuracy: {acc * 100:.2f}%")
-    
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, target_names=['Healthy (0)', 'Parkinson\'s (1)']))
 
-    print("\n" + "="*60)
+    print("\nClassification Report:")
+    print(
+        classification_report(
+            y_test, y_pred, target_names=["Healthy (0)", "Parkinson's (1)"]
+        )
+    )
+
+    print("\n" + "=" * 60)
     print("CLINICAL REMINDER FOR NEUROSCREEN:")
     print("In medical screening utilities, high SENSITIVITY (Recall for Class 1) ")
     print("is absolutely critical. A False Negative (missing a Parkinson's patient) ")
     print("is far more dangerous than a False Positive (sending a healthy person ")
     print("for further clinical evaluation). Always prioritize tuning the model ")
     print("to minimize False Negatives.")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     # Save the final optimized model
     if not os.path.exists(MODEL_SAVE_DIR):
         os.makedirs(MODEL_SAVE_DIR)
-        
+
     model.save(MODEL_SAVE_PATH)
     print(f"Model successfully saved to {MODEL_SAVE_PATH}")
+
 
 if __name__ == "__main__":
     main()
