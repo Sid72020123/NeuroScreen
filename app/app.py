@@ -129,6 +129,32 @@ VOICE_ANALYSIS_THRESHOLDS = {
     "MDVP:Shimmer": 0.05,
 }
 
+ALL_BIOMARKER_REFERENCE = {
+    "MDVP:Fo(Hz)": {"type": "range", "desc": "Baseline pitch varies by age/gender."},
+    "MDVP:Fhi(Hz)": {"type": "range", "desc": "Maximum vocal pitch."},
+    "MDVP:Flo(Hz)": {"type": "range", "desc": "Minimum vocal pitch."},
+    "MDVP:Jitter(%)": {"type": "threshold", "value": 0.007, "direction": "higher_is_bad", "desc": "< 0.007%"},
+    "MDVP:Jitter(Abs)": {"type": "threshold", "value": 0.00005, "direction": "higher_is_bad", "desc": "< 0.00005"},
+    "MDVP:RAP": {"type": "threshold", "value": 0.003, "direction": "higher_is_bad", "desc": "< 0.003"},
+    "MDVP:PPQ": {"type": "threshold", "value": 0.003, "direction": "higher_is_bad", "desc": "< 0.003"},
+    "Jitter:DDP": {"type": "threshold", "value": 0.009, "direction": "higher_is_bad", "desc": "< 0.009"},
+    "MDVP:Shimmer": {"type": "threshold", "value": 0.05, "direction": "higher_is_bad", "desc": "< 0.05"},
+    "MDVP:Shimmer(dB)": {"type": "threshold", "value": 0.3, "direction": "higher_is_bad", "desc": "< 0.3 dB"},
+    "Shimmer:APQ3": {"type": "threshold", "value": 0.015, "direction": "higher_is_bad", "desc": "< 0.015"},
+    "Shimmer:APQ5": {"type": "threshold", "value": 0.02, "direction": "higher_is_bad", "desc": "< 0.02"},
+    "MDVP:APQ": {"type": "threshold", "value": 0.025, "direction": "higher_is_bad", "desc": "< 0.025"},
+    "Shimmer:DDA": {"type": "threshold", "value": 0.046, "direction": "higher_is_bad", "desc": "< 0.046"},
+    "NHR": {"type": "threshold", "value": 0.02, "direction": "higher_is_bad", "desc": "< 0.02"},
+    "HNR": {"type": "threshold", "value": 20.0, "direction": "lower_is_bad", "desc": "> 20.0 dB"},
+    "RPDE": {"type": "threshold", "value": 0.5, "direction": "higher_is_bad", "desc": "< 0.5"},
+    "DFA": {"type": "threshold", "value": 0.7, "direction": "higher_is_bad", "desc": "< 0.7"},
+    "spread1": {"type": "threshold", "value": -5.0, "direction": "higher_is_bad", "desc": "< -5.0"},
+    "spread2": {"type": "threshold", "value": 0.2, "direction": "higher_is_bad", "desc": "< 0.2"},
+    "D2": {"type": "threshold", "value": 2.2, "direction": "higher_is_bad", "desc": "< 2.2"},
+    "PPE": {"type": "threshold", "value": 0.2, "direction": "higher_is_bad", "desc": "< 0.2"},
+}
+
+
 os.makedirs(INSTANCE_DIR, exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR, "static", "uploads"), exist_ok=True)
 
@@ -382,24 +408,36 @@ def update_final_score(session_record):
 
 
 def generate_clinical_analysis(features_dict):
-    jitter = parse_float(features_dict.get("MDVP:Jitter(%)")) or 0.0
-    shimmer = parse_float(features_dict.get("MDVP:Shimmer")) or 0.0
+    analysis_points = []
+    
+    spread2 = parse_float(features_dict.get("spread2"))
+    if spread2 is not None:
+        ref = ALL_BIOMARKER_REFERENCE.get("spread2", {}).get("value", 0.2)
+        if spread2 > ref:
+            analysis_points.append(f"Vocal Fold Spread (spread2) is elevated at {spread2:.4f}, suggesting potential vocal impairment.")
+        else:
+            analysis_points.append(f"Vocal Fold Spread (spread2) is within normal parameters ({spread2:.4f}).")
 
-    jitter_threshold = VOICE_ANALYSIS_THRESHOLDS["MDVP:Jitter(%)"]
-    shimmer_threshold = VOICE_ANALYSIS_THRESHOLDS["MDVP:Shimmer"]
+    d2 = parse_float(features_dict.get("D2"))
+    if d2 is not None:
+        ref = ALL_BIOMARKER_REFERENCE.get("D2", {}).get("value", 2.2)
+        if d2 > ref:
+            analysis_points.append(f"Correlation Dimension (D2) indicates irregular vocal patterns ({d2:.4f} > {ref}).")
+        else:
+            analysis_points.append(f"Correlation Dimension (D2) indicates stable phonation ({d2:.4f}).")
 
-    jitter_line = (
-        f"Jitter is elevated at {jitter:.4f}, above the baseline of {jitter_threshold:.4f}."
-        if jitter > jitter_threshold
-        else f"Jitter is within the expected range at {jitter:.4f}, at or below the {jitter_threshold:.4f} baseline."
-    )
-    shimmer_line = (
-        f"Shimmer is elevated at {shimmer:.4f}, suggesting more amplitude instability than the {shimmer_threshold:.4f} baseline."
-        if shimmer > shimmer_threshold
-        else f"Shimmer remains controlled at {shimmer:.4f}, staying near or below the {shimmer_threshold:.4f} baseline."
-    )
+    rpde = parse_float(features_dict.get("RPDE"))
+    if rpde is not None:
+        ref = ALL_BIOMARKER_REFERENCE.get("RPDE", {}).get("value", 0.5)
+        if rpde > ref:
+            analysis_points.append(f"RPDE score is {rpde:.4f}, showing increased vocal noise variance compared to baseline.")
+        else:
+            analysis_points.append(f"RPDE score is controlled at {rpde:.4f}, indicating healthy vocal variance.")
 
-    return [jitter_line, shimmer_line]
+    if not analysis_points:
+        analysis_points.append("Insufficient data to generate specific vocal biomarker insights.")
+
+    return analysis_points
 
 
 def format_score(value):
@@ -533,153 +571,201 @@ def render_auth_page(template_name, **context):
 
 def build_report_pdf(session_record):
     session_data = serialize_session(session_record)
-    features_dict = session_data["voice_metrics"]
-    voice_analysis_points = generate_clinical_analysis(features_dict)
+    features_dict = session_data.get("voice_metrics", {})
+    voice_analysis_points = session_data.get("voice_analysis", [])
 
     pdf = FPDF(unit="mm", format="A4")
+    pdf.set_margins(15, 15, 15)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+    page_width = pdf.w - 30
 
-    page_width = pdf.w - 20
-
-    pdf.set_fill_color(13, 110, 253)
+    # --- Header ---
+    pdf.set_fill_color(13, 148, 136) # Teal-600
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(
-        page_width, 16, "NeuroScreen Clinical Report", ln=True, align="C", fill=True
-    )
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 18, " NeuroScreen Clinical Report", ln=1, align="L", fill=True)
+    pdf.ln(6)
 
-    pdf.ln(4)
+    # --- Patient Details Box ---
     pdf.set_draw_color(203, 213, 225)
-    pdf.set_text_color(15, 23, 42)
+    pdf.set_text_color(30, 41, 59)
     pdf.set_fill_color(248, 250, 252)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.multi_cell(
-        page_width,
-        8,
-        f"Session ID: #{session_data['session_number']}\nDate: {session_data['full_timestamp']}\nPatient: {session_record.user.username}",
-        border=1,
-        fill=True,
-    )
-
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 8, "Clinical Summary", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-    pdf.multi_cell(
-        0,
-        6,
-        f"Voice score: {session_data['voice_text']}\nSpiral score: {session_data['spiral_text']}\nFinal score: {session_data['final_text']}",
-        border=1,
-    )
-
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "Voice Diagnostics", ln=True)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.set_fill_color(226, 232, 240)
-    pdf.cell(55, 8, "Metric", border=1, fill=True)
-    pdf.cell(45, 8, "Measured", border=1, fill=True)
-    pdf.cell(0, 8, "Clinical Note", border=1, ln=True, fill=True)
+    
+    pdf.cell(page_width / 3, 10, f" Patient: {session_record.user.username}", border="L T B", fill=True, ln=0)
+    pdf.cell(page_width / 3, 10, f" Session ID: #{session_data['session_number']}", border="T B", fill=True, align="C", ln=0)
+    pdf.cell(page_width / 3, 10, f" Date: {session_data['date']}", border="R T B", fill=True, align="R", ln=1)
+    pdf.ln(10)
+
+    # --- 1. Overall Neurological Risk Assessment ---
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 8, "1. Overall Neurological Risk Assessment", ln=1)
+    
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(40, 8, "Final Risk Score:", ln=0)
+    
+    pdf.set_font("Helvetica", "B", 20)
+    score = session_data['final_score']
+    if score is None:
+        pdf.set_text_color(148, 163, 184) # slate-400
+    elif score > 60:
+        pdf.set_text_color(225, 29, 72) # rose-600
+    elif score > 40:
+        pdf.set_text_color(217, 119, 6) # amber-600
+    else:
+        pdf.set_text_color(5, 150, 105) # emerald-600
+        
+    score_text = f"{session_data['final_text']}  ({session_data['final_score_classes']['name']})" if score is not None else "Pending"
+    pdf.cell(0, 8, score_text, ln=1)
+    pdf.ln(3)
+
     pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.set_x(15)
+    pdf.multi_cell(0, 6, f"Voice Assessment: {session_data['voice_text']}   |   Motor Kinematics Assessment: {session_data['spiral_text']}")
+    pdf.ln(6)
+    
+    # Divider
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(6)
 
-    metric_notes = {
-        "MDVP:Fo(Hz)": "Mean vocal pitch",
-        "MDVP:Fhi(Hz)": "Maximum vocal pitch",
-        "MDVP:Flo(Hz)": "Minimum vocal pitch",
-        "MDVP:Jitter(%)": "Voice timing stability (Jitter)",
-        "MDVP:Shimmer": "Amplitude stability (Shimmer)",
-        "NHR": "Noise-to-Harmonics Ratio",
-        "HNR": "Harmonics-to-Noise Ratio",
-        "spread2": "Vocal Fold Spread (spread2)",
-        "D2": "Correlation Dimension (D2)",
-        "RPDE": "Recurrence Period Density (RPDE)",
-    }
+    # --- 2. Voice Acoustic Diagnostics ---
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 8, "2. Voice Acoustic Diagnostics", ln=1)
 
-    # Add Audio Quality Badge if duration is available
-    audio_duration = session_data.get("voice_metrics", {}).get("audio_duration")
+    audio_duration = features_dict.get("audio_duration")
     if audio_duration:
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_text_color(21, 101, 192) # A nice blue
-        pdf.cell(0, 8, f"Data Quality: High (Audio Length: {audio_duration:.1f} seconds)", ln=True)
-        pdf.set_text_color(15, 23, 42)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(13, 148, 136) # Teal-600
+        pdf.cell(0, 6, f"[ Data Quality: High | Audio Length: {audio_duration:.1f} seconds ]", ln=1)
         pdf.ln(2)
 
+    if voice_analysis_points:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(71, 85, 105)
+        for point in voice_analysis_points:
+            pdf.set_x(15)
+            pdf.multi_cell(0, 5, f" - {point}")
+        pdf.ln(4)
+
+    # Table
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(241, 245, 249) # slate-100
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_draw_color(203, 213, 225)
+    
+    col_w = [40, 30, 110]
+    pdf.cell(col_w[0], 8, " Biomarker", border=1, fill=True, ln=0)
+    pdf.cell(col_w[1], 8, " Value", border=1, fill=True, align="C", ln=0)
+    pdf.cell(col_w[2], 8, " Clinical Note", border=1, fill=True, ln=1)
+    
+    pdf.set_font("Helvetica", "", 9)
+    fill = False
+    
     for metric_name in PDF_VOICE_FEATURES:
-        measured_value = features_dict.get(metric_name)  # Get None if not present
-        pdf.cell(55, 8, metric_name, border=1)
+        measured_value = features_dict.get(metric_name)
+        ref = ALL_BIOMARKER_REFERENCE.get(metric_name)
+        
+        pdf.set_fill_color(248, 250, 252)
+        pdf.cell(col_w[0], 8, f" {metric_name}", border=1, fill=fill, ln=0)
+        
         if measured_value is not None:
-            pdf.cell(55, 8, f"{measured_value:.4f}", border=1)
+            val_str = f"{measured_value:.4f}"
+            pdf.set_text_color(15, 23, 42)
+            if ref and ref.get("type") == "threshold":
+                if ref.get("direction") == "higher_is_bad" and measured_value > ref.get("value"):
+                    pdf.set_text_color(225, 29, 72)
+                elif ref.get("direction") == "lower_is_bad" and measured_value < ref.get("value"):
+                    pdf.set_text_color(225, 29, 72)
+                else:
+                    pdf.set_text_color(5, 150, 105)
+            pdf.cell(col_w[1], 8, val_str, border=1, align="C", fill=fill, ln=0)
+            pdf.set_text_color(15, 23, 42)
         else:
-            pdf.cell(55, 8, "N/A - Insufficient Data", border=1)
-        pdf.cell(0, 8, metric_notes.get(metric_name, ""), border=1, ln=True)
+            pdf.set_text_color(148, 163, 184)
+            pdf.cell(col_w[1], 8, "N/A", border=1, align="C", fill=fill, ln=0)
+            pdf.set_text_color(15, 23, 42)
+            
+        note = ref.get("desc", "") if ref else ""
+        pdf.cell(col_w[2], 8, f" {note}", border=1, ln=1, fill=fill)
+        fill = not fill
 
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "Explainable AI Analysis", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-    for point in voice_analysis_points:
-        pdf.multi_cell(0, 6, f"- {point}", ln=1)
+    pdf.ln(6)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(6)
 
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "Spiral Assessment", ln=True)
-    pdf.set_font("Helvetica", "", 11)
+    # --- 3. Spiral Assessment ---
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 8, "3. Motor Kinematics (Spiral Assessment)", ln=1)
 
     spiral_analysis_points = session_data.get("spiral_analysis", [])
-    original_image_url = session_data.get("spiral_original_image_url")
-    xai_image_url = session_data.get("spiral_xai_image_url")
     kinematic_variance = session_data.get("kinematic_variance")
 
     if kinematic_variance is not None:
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(
-            0,
-            6,
-            f"Kinematic Variance Score: {kinematic_variance:.1f}% (Baseline: < 40%)",
-            ln=True,
-            align="L",
-        )
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(225, 29, 72) if kinematic_variance >= 40 else pdf.set_text_color(5, 150, 105)
+        pdf.cell(0, 6, f"[ Kinematic Variance Score: {kinematic_variance:.1f}%  (Baseline: < 40%) ]", ln=1)
         pdf.ln(2)
 
-    # Include side-by-side images if both exist
-    img_w = page_width / 2.2
+    pdf.set_text_color(71, 85, 105)
+    pdf.set_font("Helvetica", "", 10)
+    if spiral_analysis_points:
+        for point in spiral_analysis_points:
+            pdf.set_x(15)
+            pdf.multi_cell(0, 5, f" - {point}")
+    else:
+        pdf.set_x(15)
+        pdf.multi_cell(0, 6, "N/A - Insufficient Data: Spiral test was not completed for this session.")
+    
+    pdf.ln(6)
+
+    # Images
+    original_image_url = session_data.get("spiral_original_image_url")
+    xai_image_url = session_data.get("spiral_xai_image_url")
+
+    img_w = 70
     if original_image_url and xai_image_url:
         orig_path = os.path.join(BASE_DIR, original_image_url.lstrip("/"))
         xai_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
         if os.path.exists(orig_path) and os.path.exists(xai_path):
+            if pdf.get_y() + img_w > 260:
+                pdf.add_page()
             y_img = pdf.get_y()
-            pdf.image(orig_path, w=img_w, x=15, y=y_img)
-            pdf.image(xai_path, w=img_w, x=15 + img_w + 5, y=y_img)
+            
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(15, 23, 42)
+            pdf.text(35, y_img + 3, "Original Drawing")
+            pdf.text(115, y_img + 3, "AI Heatmap Overlay")
+            
+            y_img += 5
+            pdf.image(orig_path, w=img_w, x=20, y=y_img)
+            pdf.image(xai_path, w=img_w, x=100, y=y_img)
             pdf.set_y(y_img + img_w + 5)
-            pdf.ln(4)
-    # Fallback if only the heatmap exists
+            
     elif xai_image_url:
         xai_path = os.path.join(BASE_DIR, xai_image_url.lstrip("/"))
         if os.path.exists(xai_path):
-            pdf.image(xai_path, w=img_w, x=pdf.get_x() + (page_width - img_w) / 2)
-            pdf.ln(4)
+            if pdf.get_y() + img_w > 260:
+                pdf.add_page()
+            y_img = pdf.get_y()
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.text(pdf.w/2 - 15, y_img + 3, "AI Heatmap Overlay")
+            y_img += 5
+            pdf.image(xai_path, w=img_w, x=(pdf.w - img_w) / 2, y=y_img)
+            pdf.set_y(y_img + img_w + 5)
 
-    if spiral_analysis_points:
-        for point in spiral_analysis_points:
-            pdf.multi_cell(0, 6, f"- {point}", ln=1)
-    else:
-        pdf.multi_cell(
-            0,
-            6,
-            "N/A - Insufficient Data: Spiral test was not completed for this session.",
-            border=1,
-        )
-
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.multi_cell(
-        0,
-        5,
-        "Clinical interpretation note: This report is a screening summary and should be reviewed alongside the patient history, examination findings, and any additional neurological assessment.",
-    )
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(148, 163, 184)
+    pdf.set_x(15)
+    pdf.multi_cell(0, 4, "Disclaimer: This clinical report is a screening summary generated by an AI model and should be reviewed alongside formal medical evaluation, patient history, and neurological assessment by a certified professional. It is not intended as a substitute for professional medical advice, diagnosis, or treatment.")
 
     buffer = BytesIO()
     pdf_bytes = pdf.output(dest="S")
@@ -912,6 +998,7 @@ def session_hub(session_id):
         "audio_duration": audio_duration,
         "kinematic_variance": kinematic_variance,
         "clinical_interpretation": clinical_interpretation,
+        "biomarker_references": ALL_BIOMARKER_REFERENCE,
     }
 
     return render_template(
@@ -1087,12 +1174,15 @@ def _preprocess_spiral_image(img_bytes):
             rgb_channels * alpha_factor + white_background * (1 - alpha_factor)
         ).astype(np.uint8)
         img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
+        img_color = blended_img
     elif len(img_raw.shape) == 3:
         # Handle standard BGR images.
         img_gray = cv2.cvtColor(img_raw, cv2.COLOR_BGR2GRAY)
+        img_color = img_raw
     else:
         # Assume it's already grayscale.
         img_gray = img_raw
+        img_color = cv2.cvtColor(img_raw, cv2.COLOR_GRAY2BGR)
 
     # 3. Apply a slight Gaussian Blur to remove pixel noise before thresholding.
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
@@ -1108,13 +1198,21 @@ def _preprocess_spiral_image(img_bytes):
     )
 
     cropped_binary_img = binary_img  # Default to the uncropped image
+    cropped_color_img = img_color
+    
     if contours:
         largest_contour = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(largest_contour)
+        
         cropped_img = binary_img[y : y + h, x : x + w]
+        c_color_img = img_color[y : y + h, x : x + w]
+        
         pad = 10
         cropped_binary_img = cv2.copyMakeBorder(
             cropped_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0
+        )
+        cropped_color_img = cv2.copyMakeBorder(
+            c_color_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255)
         )
 
     # 6. Resize to (224, 224) for the model input.
@@ -1136,7 +1234,7 @@ def _preprocess_spiral_image(img_bytes):
     # For Grad-CAM, we need a 3-channel BGR image.
     xai_base_img = cv2.cvtColor(cropped_binary_img, cv2.COLOR_GRAY2BGR)
 
-    return processed_img_tensor, xai_base_img
+    return processed_img_tensor, xai_base_img, cropped_color_img
 
 
 @app.route("/upload_spiral/<int:session_id>", methods=["POST"])
@@ -1184,7 +1282,7 @@ def upload_spiral(session_id):
 
     try:
         # 1. Preprocess the image using the strict, centralized pipeline.
-        processed_img, xai_base_img = _preprocess_spiral_image(img_bytes)
+        processed_img, xai_base_img, cropped_color_img = _preprocess_spiral_image(img_bytes)
 
         # Save the true original uploaded image for comparison
         user_uploads_dir = os.path.join(
@@ -1195,10 +1293,8 @@ def upload_spiral(session_id):
             user_uploads_dir, f"session_{session_id}_original.jpg"
         )
 
-        # Decode raw bytes to standard BGR color image to save the unedited version
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        img_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        cv2.imwrite(orig_save_path, img_raw)
+        # Save the beautifully cropped color image so it matches the heatmap overlay perfectly
+        cv2.imwrite(orig_save_path, cropped_color_img)
 
         original_image_url = (
             f"/static/uploads/user_{current_user.id}/session_{session_id}_original.jpg"
