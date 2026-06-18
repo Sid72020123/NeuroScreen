@@ -745,70 +745,11 @@ def dashboard():
     recent_session = sessions[-1] if sessions else None
     total_sessions = len(sessions)
 
-    trend_labels = []
-    trend_final_scores = []
-
-    for s in sessions:
-        if s.final_score is not None:
-            trend_labels.append(s.timestamp.strftime("%b %d, %Y"))
-            trend_final_scores.append(s.final_score)
-
-    top_voice_features = []
-    kinematic_jitter = None
-    xai_image_url = None
-    clinical_interpretation = "No data available to form a clinical interpretation."
-    serialized = None
-
-    if recent_session:
-        serialized = serialize_session(recent_session)
-        metrics = serialized.get("voice_metrics", {})
-
-        def get_status(val, threshold):
-            if val is None:
-                return "Pending"
-            return "Elevated" if val > threshold else "Normal"
-
-        top_voice_features = [
-            {
-                "name": "spread2",
-                "value": metrics.get("spread2"),
-                "status": get_status(metrics.get("spread2"), 0.2),
-            },
-            {
-                "name": "D2",
-                "value": metrics.get("D2"),
-                "status": get_status(metrics.get("D2"), 2.0),
-            },
-            {
-                "name": "DFA",
-                "value": metrics.get("DFA"),
-                "status": get_status(metrics.get("DFA"), 0.7),
-            },
-        ]
-
-        kinematic_jitter = recent_session.spiral_score
-        xai_image_url = serialized.get("spiral_xai_image_url")
-
-        if recent_session.final_score is not None:
-            if recent_session.final_score > 60:
-                clinical_interpretation = "Analysis detected localized high-frequency jitter and elevated vocal biomarkers, suggesting further clinical evaluation is recommended."
-            elif recent_session.final_score > 40:
-                clinical_interpretation = "Analysis detected moderate variations in fine motor or vocal control. Monitoring over time is advised."
-            else:
-                clinical_interpretation = "Analysis indicates stable fine motor and vocal control. No significant anomalies detected."
-
-    clinical_data = {
-        "recent_session": serialized if recent_session else None,
-        "total_sessions": total_sessions,
-        "top_voice_features": top_voice_features,
-        "kinematic_jitter": kinematic_jitter,
-        "trend_labels": trend_labels,
-        "trend_final_scores": trend_final_scores,
-        "xai_image_url": xai_image_url,
-        "clinical_interpretation": clinical_interpretation,
-    }
-
-    return render_template("dashboard.html", clinical_data=clinical_data)
+    return render_template(
+        "dashboard.html",
+        recent_session=serialize_session(recent_session) if recent_session else None,
+        total_sessions=total_sessions,
+    )
 
 
 @app.route("/session/", defaults={"session_id": None})
@@ -820,9 +761,48 @@ def session_hub(session_id):
         flash("Start a new screening session first.", "warning")
         return redirect(url_for("dashboard"))
 
+    serialized = serialize_session(session_record)
+    metrics = serialized.get("voice_metrics", {})
+
+    def get_status(val, threshold):
+        if val is None:
+            return "Pending"
+        return "Elevated" if val > threshold else "Normal"
+
+    all_voice_features = []
+    for feat in ALL_22_FEATURES:
+        val = metrics.get(feat)
+        status = "Pending"
+        if val is not None:
+            if feat in VOICE_ANALYSIS_THRESHOLDS:
+                status = (
+                    "Elevated" if val > VOICE_ANALYSIS_THRESHOLDS[feat] else "Normal"
+                )
+            else:
+                status = "Measured"
+        all_voice_features.append({"name": feat, "value": val, "status": status})
+
+    kinematic_jitter = session_record.spiral_score
+    xai_image_url = serialized.get("spiral_xai_image_url")
+
+    clinical_interpretation = "No data available to form a clinical interpretation."
+    if session_record.final_score is not None:
+        if session_record.final_score > 60:
+            clinical_interpretation = "Analysis detected localized high-frequency jitter and elevated vocal biomarkers, suggesting further clinical evaluation is recommended."
+        elif session_record.final_score > 40:
+            clinical_interpretation = "Analysis detected moderate variations in fine motor or vocal control. Monitoring over time is advised."
+        else:
+            clinical_interpretation = "Analysis indicates stable fine motor and vocal control. No significant anomalies detected."
+
+    clinical_data = {
+        "all_voice_features": all_voice_features,
+        "kinematic_jitter": kinematic_jitter,
+        "xai_image_url": xai_image_url,
+        "clinical_interpretation": clinical_interpretation,
+    }
+
     return render_template(
-        "session.html",
-        session_record=serialize_session(session_record),
+        "session.html", session_record=serialized, clinical_data=clinical_data
     )
 
 
