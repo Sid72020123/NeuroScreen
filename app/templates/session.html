@@ -33,10 +33,9 @@
             class="mt-4 inline-block px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider border {{ session_record.final_score_classes.bg }} {{ session_record.final_score_classes.text }} {{ session_record.final_score_classes.border }}">
             {{ session_record.final_score_classes.name }}
         </p>
-        <div class="mt-6 p-4 bg-slate-50 rounded-xl inline-block max-w-3xl border border-slate-100">
+        <div class="mt-6 p-4 bg-slate-50 rounded-xl block mx-auto max-w-3xl border border-slate-100">
             <p class="text-slate-600 font-medium text-sm">
-                <span class="font-bold text-slate-800">Clinical Insights:</span> {{
-                clinical_data.clinical_interpretation }}
+                <span class="font-bold text-slate-800">Clinical Insights:</span> {{ clinical_data.clinical_interpretation }}
             </p>
         </div>
     </div>
