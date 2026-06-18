@@ -44,6 +44,25 @@
                 <strong>Final Score:</strong>
                 <span class="font-bold text-slate-800">{{ recent_session.final_text }}</span>
             </p>
+            {% if recent_session.voice_metrics %}
+            <div class="mt-3 pt-3 border-t border-slate-100">
+                <p class="font-semibold text-xs text-slate-500 uppercase tracking-wider mb-2">Key Biomarkers</p>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
+                        <p class="text-xs text-slate-500">spread2</p>
+                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('spread2')) if recent_session.voice_metrics.get('spread2') is not none else 'N/A' }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
+                        <p class="text-xs text-slate-500">D2</p>
+                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('D2')) if recent_session.voice_metrics.get('D2') is not none else 'N/A' }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded p-2 text-center border border-slate-100">
+                        <p class="text-xs text-slate-500">RPDE</p>
+                        <p class="font-bold text-slate-800">{{ "%.3f"|format(recent_session.voice_metrics.get('RPDE')) if recent_session.voice_metrics.get('RPDE') is not none else 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             <a
                 href="{{ url_for('session_hub', session_id=recent_session.id) }}"
                 class="inline-block mt-2 font-medium text-teal-600 hover:text-teal-500"

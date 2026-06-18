@@ -73,6 +73,15 @@
                     </p>
                 </div>
 
+                <!-- Audio Quality Badge -->
+                {% if clinical_data.audio_duration %}
+                <div class="mb-6 border border-blue-200 bg-blue-50/50 rounded-lg p-3 text-center">
+                    <p class="text-xs font-bold text-blue-800">
+                        Data Quality: High (Audio Length: {{ "%.1f"|format(clinical_data.audio_duration) }} seconds)
+                    </p>
+                </div>
+                {% endif %}
+
                 <!-- Explainable AI Text -->
                 <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Explainable AI Analysis</h4>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
@@ -118,6 +127,31 @@
                         </div>
                     </div>
                     {% endfor %}
+                </div>
+
+                <!-- All Biomarkers Table -->
+                <div class="mt-8">
+                    <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">All Vocal Biomarkers</h4>
+                    <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Biomarker</th>
+                                    <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-slate-200">
+                                {% for key, value in session_record.voice_metrics.items() %}
+                                    {% if key not in ['spread2', 'D2', 'RPDE', 'audio_duration'] %}
+                                    <tr class="hover:bg-slate-50 transition-colors">
+                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-slate-700">{{ key }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-sm text-slate-600 text-right">{{ "%.4f"|format(value) if value is number else value }}</td>
+                                    </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 {% else %}
                 <div class="flex flex-col flex-grow items-center justify-center text-center">
@@ -174,13 +208,6 @@
                 </div>
 
                 <!-- Explainable AI Text -->
-                {% if clinical_data.audio_duration %}
-                <div class="mb-6 border border-blue-200 bg-blue-50/50 rounded-lg p-3 text-center">
-                    <p class="text-xs font-bold text-blue-800">
-                        Data Quality: High (Audio Length: {{ "%.1f"|format(clinical_data.audio_duration) }} seconds)
-                    </p>
-                </div>
-                {% endif %}
 
                 <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Explainable AI Analysis</h4>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
@@ -199,28 +226,31 @@
                 <!-- Image Preview / XAI -->
                 <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Grad-CAM Heatmap Review</h4>
                 {% if clinical_data.xai_image_url %}
-                <div class="grid grid-cols-1 gap-6 mb-4">
-                    <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50">
-                        <p class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">AI Heatmap</p>
-                        <img
-                            src="{{ clinical_data.xai_image_url }}"
-                            alt="Grad-CAM Heatmap"
-                            class="w-full max-w-md object-contain rounded-lg border border-slate-200 shadow-md mb-2" />
-                        <p class="text-xs text-slate-500 italic text-center mt-2 px-4">
-                            Red regions on the AI Heatmap highlight localized pixel-level variance identified during the
-                            spiral stroke.
-                        </p>
+                {% if clinical_data.kinematic_variance is not none %}
+                <div class="mb-6 border border-rose-200 bg-rose-50/50 rounded-lg p-3 text-center">
+                    <p class="text-xs font-bold text-rose-800">
+                        Kinematic Variance Score: {{ "%.1f"|format(clinical_data.kinematic_variance) }}% (Baseline: &lt; 40%)
+                    </p>
+                </div>
+                {% endif %}
+                
+                <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50 mb-4">
+                    <p class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Interactive AI Heatmap Overlay</p>
+                    <div class="relative w-full max-w-md">
+                        <!-- Original Image (Bottom) -->
+                        <img src="{{ clinical_data.original_image_url }}" alt="Original Spiral Drawing" class="w-full h-auto object-contain rounded-lg border border-slate-200 shadow-md block" />
+                        <!-- AI Heatmap (Top, Absolute) -->
+                        <img id="heatmapOverlay" src="{{ clinical_data.xai_image_url }}" alt="Grad-CAM Heatmap" class="absolute top-0 left-0 w-full h-full object-contain rounded-lg transition-opacity duration-100" style="opacity: 0.7;" />
                     </div>
-
-                    {% if clinical_data.original_image_url %}
-                    <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50">
-                        <p class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Original Drawing</p>
-                        <img
-                            src="{{ clinical_data.original_image_url }}"
-                            alt="Original Spiral Drawing"
-                            class="w-full max-w-md object-contain rounded-lg border border-slate-200 shadow-md mb-2" />
+                    <!-- Slider -->
+                    <div class="w-full max-w-md mt-4">
+                        <label for="heatmapOpacitySlider" class="block text-xs text-slate-600 font-medium mb-1 text-center">Adjust Heatmap Opacity</label>
+                        <input type="range" id="heatmapOpacitySlider" min="0" max="1" step="0.01" value="0.7" class="w-full accent-teal-600" />
                     </div>
-                    {% endif %}
+                    <p class="text-xs text-slate-500 italic text-center mt-3 px-4">
+                        Red regions on the AI Heatmap highlight localized pixel-level variance identified during the
+                        spiral stroke. Use the slider to fade between the original drawing and the AI heatmap.
+                    </p>
                 </div>
                 {% endif %} {% else %}
                 <div class="flex flex-col flex-grow items-center justify-center text-center">
@@ -245,4 +275,16 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const slider = document.getElementById("heatmapOpacitySlider");
+        const heatmap = document.getElementById("heatmapOverlay");
+        if (slider && heatmap) {
+            slider.addEventListener("input", function (e) {
+                heatmap.style.opacity = e.target.value;
+            });
+        }
+    });
+</script>
 {% endblock %}

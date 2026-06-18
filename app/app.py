@@ -98,8 +98,6 @@ PDF_VOICE_FEATURES = [
     "HNR",
     "RPDE",
     "DFA",
-    "MDVP:Jitter(%)",
-    "MDVP:Shimmer",
 ]
 
 # Top 3 features for the main dashboard's XAI visualization
@@ -594,15 +592,27 @@ def build_report_pdf(session_record):
         "MDVP:Shimmer": "Amplitude stability (Shimmer)",
         "NHR": "Noise-to-Harmonics Ratio",
         "HNR": "Harmonics-to-Noise Ratio",
+        "spread2": "Vocal Fold Spread (spread2)",
+        "D2": "Correlation Dimension (D2)",
+        "RPDE": "Recurrence Period Density (RPDE)",
     }
+
+    # Add Audio Quality Badge if duration is available
+    audio_duration = session_data.get("voice_metrics", {}).get("audio_duration")
+    if audio_duration:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(21, 101, 192) # A nice blue
+        pdf.cell(0, 8, f"Data Quality: High (Audio Length: {audio_duration:.1f} seconds)", ln=True)
+        pdf.set_text_color(15, 23, 42)
+        pdf.ln(2)
 
     for metric_name in PDF_VOICE_FEATURES:
         measured_value = features_dict.get(metric_name)  # Get None if not present
         pdf.cell(55, 8, metric_name, border=1)
         if measured_value is not None:
-            pdf.cell(45, 8, f"{measured_value:.4f}", border=1)
+            pdf.cell(55, 8, f"{measured_value:.4f}", border=1)
         else:
-            pdf.cell(45, 8, "N/A", border=1)
+            pdf.cell(55, 8, "N/A - Insufficient Data", border=1)
         pdf.cell(0, 8, metric_notes.get(metric_name, ""), border=1, ln=True)
 
     pdf.ln(3)
@@ -723,12 +733,18 @@ def generate_gradcam(
 
     superimposed_img = cv2.addWeighted(base_img, 0.6, heatmap_jet, 0.4, 0)
 
+    kinematic_variance = 0.0
     if contours:
         main_contour = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(main_contour)
         cv2.rectangle(
             superimposed_img, (x, y), (x + w, y + h), (0, 0, 255), 2
         )  # Red rectangle
+        
+        roi = heatmap_resized[y:y+h, x:x+w]
+        if roi.size > 0:
+            max_intensity = np.max(roi)
+            kinematic_variance = float(max_intensity * 100)
 
     # Save the annotated image
     user_uploads_dir = os.path.join(BASE_DIR, "static", "uploads", f"user_{user_id}")
@@ -736,7 +752,7 @@ def generate_gradcam(
     save_path = os.path.join(user_uploads_dir, f"session_{session_id}_xai.jpg")
     cv2.imwrite(save_path, superimposed_img)
 
-    return f"/static/uploads/user_{user_id}/session_{session_id}_xai.jpg"
+    return f"/static/uploads/user_{user_id}/session_{session_id}_xai.jpg", kinematic_variance
 
 
 @app.route("/")
