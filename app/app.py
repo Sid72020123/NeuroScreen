@@ -469,6 +469,7 @@ def serialize_session(session_record, session_number=None):
         "voice_analysis": voice_analysis,
         "spiral_analysis": spiral_metrics.get("analysis", []),
         "spiral_xai_image_url": spiral_metrics.get("xai_image_url"),
+        "spiral_original_image_url": spiral_metrics.get("original_image_url"),
         "final_score_classes": get_score_classes(session_record.final_score),
         "voice_score_classes": get_score_classes(session_record.voice_score),
         "spiral_score_classes": get_score_classes(session_record.spiral_score),
@@ -807,6 +808,7 @@ def session_hub(session_id):
 
     kinematic_jitter = session_record.spiral_score
     xai_image_url = serialized.get("spiral_xai_image_url")
+    original_image_url = serialized.get("spiral_original_image_url")
 
     clinical_interpretation = "No data available to form a clinical interpretation."
     if session_record.final_score is not None:
@@ -821,6 +823,7 @@ def session_hub(session_id):
         "all_voice_features": all_voice_features,
         "kinematic_jitter": kinematic_jitter,
         "xai_image_url": xai_image_url,
+        "original_image_url": original_image_url,
         "clinical_interpretation": clinical_interpretation,
     }
 
@@ -1095,6 +1098,24 @@ def upload_spiral(session_id):
         # 1. Preprocess the image using the strict, centralized pipeline.
         processed_img, xai_base_img = _preprocess_spiral_image(img_bytes)
 
+        # Save the true original uploaded image for comparison
+        user_uploads_dir = os.path.join(
+            BASE_DIR, "static", "uploads", f"user_{current_user.id}"
+        )
+        os.makedirs(user_uploads_dir, exist_ok=True)
+        orig_save_path = os.path.join(
+            user_uploads_dir, f"session_{session_id}_original.jpg"
+        )
+
+        # Decode raw bytes to standard BGR color image to save the unedited version
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        cv2.imwrite(orig_save_path, img_raw)
+
+        original_image_url = (
+            f"/static/uploads/user_{current_user.id}/session_{session_id}_original.jpg"
+        )
+
         # 2. Perform prediction. The model output is a single probability (sigmoid).
         parkinsons_prob = model.predict(processed_img)[0][0]
         spiral_score = round(float(parkinsons_prob) * 100, 1)
@@ -1122,7 +1143,11 @@ def upload_spiral(session_id):
         # 5. Update database record.
         session_record.spiral_score = spiral_score
         session_record.spiral_metrics = json.dumps(
-            {"analysis": spiral_analysis, "xai_image_url": xai_image_url}
+            {
+                "analysis": spiral_analysis,
+                "xai_image_url": xai_image_url,
+                "original_image_url": original_image_url,
+            }
         )
         update_final_score(session_record)
         db.session.commit()

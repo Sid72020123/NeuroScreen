@@ -35,6 +35,11 @@
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        Session ID
+                    </th>
+                    <th
+                        scope="col"
+                        class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                         Date & Time
                     </th>
                     <th
@@ -60,6 +65,9 @@
             <tbody class="bg-white divide-y divide-slate-200">
                 {% for session in sessions %}
                 <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-slate-700">
+                        #{{ session.session_number }}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                         {{ session.full_timestamp }}
                     </td>

@@ -198,14 +198,28 @@
                 <!-- Image Preview / XAI -->
                 <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Grad-CAM Heatmap Review</h4>
                 {% if clinical_data.xai_image_url %}
-                <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl">
-                    <img
-                        src="{{ clinical_data.xai_image_url }}"
-                        alt="Grad-CAM Heatmap"
-                        class="max-w-full max-h-48 object-contain rounded border border-slate-100 shadow-sm mb-3" />
-                    <p class="text-xs text-slate-500 italic text-center">
-                        Red regions highlight localized pixel-level variance identified during the spiral stroke.
-                    </p>
+                <div class="grid grid-cols-1 gap-6 mb-4">
+                    <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50">
+                        <p class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">AI Heatmap</p>
+                        <img
+                            src="{{ clinical_data.xai_image_url }}"
+                            alt="Grad-CAM Heatmap"
+                            class="w-full max-w-md object-contain rounded-lg border border-slate-200 shadow-md mb-2" />
+                        <p class="text-xs text-slate-500 italic text-center mt-2 px-4">
+                            Red regions on the AI Heatmap highlight localized pixel-level variance identified during the
+                            spiral stroke.
+                        </p>
+                    </div>
+
+                    {% if clinical_data.original_image_url %}
+                    <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50">
+                        <p class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Original Drawing</p>
+                        <img
+                            src="{{ clinical_data.original_image_url }}"
+                            alt="Original Spiral Drawing"
+                            class="w-full max-w-md object-contain rounded-lg border border-slate-200 shadow-md mb-2" />
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %} {% else %}
                 <div class="flex flex-col flex-grow items-center justify-center text-center">
