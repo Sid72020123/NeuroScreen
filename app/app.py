@@ -45,7 +45,7 @@ from fpdf import FPDF
 from sqlalchemy import inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
-from dotenv import load_dotenv
+
 import sys
 
 # Add the project root directory to the Python path to resolve the import error.
@@ -131,11 +131,6 @@ TOP_XAI_FEATURES = {
 }
 
 
-VOICE_ANALYSIS_THRESHOLDS = {
-    # Using a more sensitive threshold based on UCI dataset characteristics
-    "MDVP:Jitter(%)": 0.007,
-    "MDVP:Shimmer": 0.05,
-}
 
 ALL_BIOMARKER_REFERENCE = {
     "MDVP:Fo(Hz)": {"type": "range", "desc": "Baseline pitch varies by age/gender."},
