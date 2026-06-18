@@ -79,6 +79,7 @@ ALL_22_FEATURES = [
     "PPE",
 ]
 
+# Features to drop for the ML model prediction
 FEATURES_TO_DROP = [
     "Jitter:DDP",
     "MDVP:PPQ",
@@ -87,8 +88,42 @@ FEATURES_TO_DROP = [
     "MDVP:Jitter(%)",
 ]
 
-# This list is used for PDF report generation. It's now more comprehensive.
-VOICE_FEATURE_COLUMNS = ALL_22_FEATURES
+# Curated list of the most impactful features for PDF reporting
+PDF_VOICE_FEATURES = [
+    "spread1",
+    "spread2",
+    "D2",
+    "PPE",
+    "MDVP:Fo(Hz)",
+    "HNR",
+    "RPDE",
+    "DFA",
+    "MDVP:Jitter(%)",
+    "MDVP:Shimmer",
+]
+
+# Top 3 features for the main dashboard's XAI visualization
+TOP_XAI_FEATURES = {
+    "spread2": {
+        "name": "Vocal Fold Spread (spread2)",
+        "healthy_avg": 0.1,
+        "pd_avg": 0.4,
+        "unit": "",
+    },
+    "D2": {
+        "name": "Correlation Dimension (D2)",
+        "healthy_avg": 1.5,
+        "pd_avg": 2.5,
+        "unit": "",
+    },
+    "RPDE": {
+        "name": "Recurrence Period Density (RPDE)",
+        "healthy_avg": 0.4,
+        "pd_avg": 0.6,
+        "unit": "",
+    },
+}
+
 
 VOICE_ANALYSIS_THRESHOLDS = {
     # Using a more sensitive threshold based on UCI dataset characteristics
@@ -470,6 +505,7 @@ def serialize_session(session_record, session_number=None):
         "spiral_analysis": spiral_metrics.get("analysis", []),
         "spiral_xai_image_url": spiral_metrics.get("xai_image_url"),
         "spiral_original_image_url": spiral_metrics.get("original_image_url"),
+        "kinematic_variance": spiral_metrics.get("kinematic_variance"),
         "final_score_classes": get_score_classes(session_record.final_score),
         "voice_score_classes": get_score_classes(session_record.voice_score),
         "spiral_score_classes": get_score_classes(session_record.spiral_score),
@@ -560,10 +596,13 @@ def build_report_pdf(session_record):
         "HNR": "Harmonics-to-Noise Ratio",
     }
 
-    for metric_name in VOICE_FEATURE_COLUMNS:
-        measured_value = features_dict.get(metric_name, 0.0)
+    for metric_name in PDF_VOICE_FEATURES:
+        measured_value = features_dict.get(metric_name)  # Get None if not present
         pdf.cell(55, 8, metric_name, border=1)
-        pdf.cell(45, 8, f"{measured_value:.4f}", border=1)
+        if measured_value is not None:
+            pdf.cell(45, 8, f"{measured_value:.4f}", border=1)
+        else:
+            pdf.cell(45, 8, "N/A", border=1)
         pdf.cell(0, 8, metric_notes.get(metric_name, ""), border=1, ln=True)
 
     pdf.ln(3)
@@ -581,6 +620,19 @@ def build_report_pdf(session_record):
     spiral_analysis_points = session_data.get("spiral_analysis", [])
     original_image_url = session_data.get("spiral_original_image_url")
     xai_image_url = session_data.get("spiral_xai_image_url")
+    kinematic_variance = session_data.get("kinematic_variance")
+
+    if kinematic_variance is not None:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(
+            0,
+            6,
+            f"Kinematic Variance Score: {kinematic_variance:.1f}% (Baseline: < 40%)",
+            ln=True,
+            align="L",
+        )
+        pdf.set_font("Helvetica", "", 11)
+        pdf.ln(2)
 
     # Include side-by-side images if both exist
     img_w = page_width / 2.2
@@ -607,7 +659,7 @@ def build_report_pdf(session_record):
         pdf.multi_cell(
             0,
             6,
-            "Spiral test was not completed for this session, or analysis is not available.",
+            "N/A - Insufficient Data: Spiral test was not completed for this session.",
             border=1,
         )
 
@@ -629,7 +681,12 @@ def build_report_pdf(session_record):
 
 
 def generate_gradcam(
-    img_array, base_img, model, session_id, user_id, last_conv_layer_name="out_relu"
+    img_array,
+    base_img,
+    model,
+    session_id,
+    user_id,
+    last_conv_layer_name="out_relu",
 ):
     grad_model = tf.keras.models.Model(
         [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
@@ -803,22 +860,24 @@ def session_hub(session_id):
             return "Pending"
         return "Elevated" if val > threshold else "Normal"
 
-    all_voice_features = []
-    for feat in ALL_22_FEATURES:
-        val = metrics.get(feat)
-        status = "Pending"
-        if val is not None:
-            if feat in VOICE_ANALYSIS_THRESHOLDS:
-                status = (
-                    "Elevated" if val > VOICE_ANALYSIS_THRESHOLDS[feat] else "Normal"
-                )
-            else:
-                status = "Measured"
-        all_voice_features.append({"name": feat, "value": val, "status": status})
+    top_voice_features = []
+    for feat_key, config in TOP_XAI_FEATURES.items():
+        value = metrics.get(feat_key)
+        percent = 0
+        if value is not None:
+            # Calculate position on the 0-100 scale for the bullet chart
+            feat_range = config["pd_avg"] - config["healthy_avg"]
+            if feat_range > 0:
+                percent = ((value - config["healthy_avg"]) / feat_range) * 100
+                percent = max(0, min(100, percent))  # Clamp between 0 and 100
+
+        top_voice_features.append({**config, "value": value, "percent": percent})
 
     kinematic_jitter = session_record.spiral_score
     xai_image_url = serialized.get("spiral_xai_image_url")
     original_image_url = serialized.get("spiral_original_image_url")
+    audio_duration = metrics.get("audio_duration")
+    kinematic_variance = serialized.get("kinematic_variance")
 
     clinical_interpretation = "No data available to form a clinical interpretation."
     if session_record.final_score is not None:
@@ -830,10 +889,12 @@ def session_hub(session_id):
             clinical_interpretation = "Analysis indicates stable fine motor and vocal control. No significant anomalies detected."
 
     clinical_data = {
-        "all_voice_features": all_voice_features,
+        "top_voice_features": top_voice_features,
         "kinematic_jitter": kinematic_jitter,
         "xai_image_url": xai_image_url,
         "original_image_url": original_image_url,
+        "audio_duration": audio_duration,
+        "kinematic_variance": kinematic_variance,
         "clinical_interpretation": clinical_interpretation,
     }
 
@@ -953,6 +1014,7 @@ def upload_voice():
         features_dict = {
             key: float(value) for key, value in zip(ALL_22_FEATURES, feature_values)
         }
+        features_dict["audio_duration"] = duration
         session_record.voice_score = voice_score
         session_record.voice_metrics = json.dumps(features_dict, sort_keys=True)
         update_final_score(session_record)
@@ -1132,8 +1194,13 @@ def upload_spiral(session_id):
         prediction = "High Risk" if parkinsons_prob >= 0.5 else "Low Risk"
 
         # 3. Generate Explainable AI (Grad-CAM) heatmap.
-        xai_image_url = generate_gradcam(
-            processed_img, xai_base_img, model, session_id, current_user.id, "out_relu"
+        xai_image_url, kinematic_variance = generate_gradcam(
+            processed_img,
+            xai_base_img,
+            model,
+            session_id,
+            current_user.id,
+            "out_relu",
         )
 
         # 4. Generate analysis text based on the risk score.
@@ -1157,6 +1224,7 @@ def upload_spiral(session_id):
                 "analysis": spiral_analysis,
                 "xai_image_url": xai_image_url,
                 "original_image_url": original_image_url,
+                "kinematic_variance": kinematic_variance,
             }
         )
         update_final_score(session_record)

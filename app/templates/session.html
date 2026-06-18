@@ -89,42 +89,35 @@
                 </div>
 
                 <!-- Features Table -->
-                <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Extracted Biomarkers</h4>
-                <div class="overflow-x-auto border border-slate-200 rounded-xl max-h-[36rem] overflow-y-auto">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 sticky top-0">
-                            <tr>
-                                <th
-                                    class="px-4 py-3 text-left font-semibold text-slate-600 uppercase tracking-wider text-xs">
-                                    Feature
-                                </th>
-                                <th
-                                    class="px-4 py-3 text-left font-semibold text-slate-600 uppercase tracking-wider text-xs">
-                                    Value
-                                </th>
-                                <th
-                                    class="px-4 py-3 text-left font-semibold text-slate-600 uppercase tracking-wider text-xs">
-                                    Status
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-slate-100">
-                            {% for feature in clinical_data.all_voice_features %}
-                            <tr class="hover:bg-slate-50 transition-colors">
-                                <td class="px-4 py-2.5 font-medium text-slate-800">{{ feature.name }}</td>
-                                <td class="px-4 py-2.5 text-slate-500">
-                                    {{ "%.4f"|format(feature.value) if feature.value else 'N/A' }}
-                                </td>
-                                <td class="px-4 py-2.5">
-                                    <span
-                                        class="px-2.5 py-1 inline-flex text-[10px] leading-4 font-bold rounded-full uppercase tracking-wider {{ 'bg-emerald-100 text-emerald-800' if feature.status == 'Normal' else 'bg-rose-100 text-rose-800' if feature.status == 'Elevated' else 'bg-slate-100 text-slate-600' }}">
-                                        {{ feature.status }}
-                                    </span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <h4 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wide">High-Impact Biomarkers</h4>
+                <div class="space-y-6">
+                    {% for feature in clinical_data.top_voice_features %}
+                    <div>
+                        <div class="flex justify-between items-baseline mb-1">
+                            <p class="text-sm font-medium text-slate-700">{{ feature.name }}</p>
+                            <p
+                                class="text-sm font-bold {{ 'text-rose-600' if feature.percent > 50 else 'text-emerald-600' }}">
+                                {{ "%.3f"|format(feature.value) if feature.value is not none else 'N/A' }}{{
+                                feature.unit }}
+                            </p>
+                        </div>
+                        <div class="relative h-2.5 bg-slate-200 rounded-full w-full">
+                            <!-- Background gradient bar -->
+                            <div
+                                class="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400 rounded-full opacity-80"></div>
+                            <!-- Patient's score marker -->
+                            {% if feature.value is not none %}
+                            <div
+                                class="absolute top-[-2px] h-3.5 w-1.5 bg-slate-800 rounded-full shadow-md border-2 border-white"
+                                style="left: calc({{ feature.percent }}% - 3px);"></div>
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>Healthy Avg.</span>
+                            <span>PD Avg.</span>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
                 {% else %}
                 <div class="flex flex-col flex-grow items-center justify-center text-center">
@@ -181,6 +174,14 @@
                 </div>
 
                 <!-- Explainable AI Text -->
+                {% if clinical_data.audio_duration %}
+                <div class="mb-6 border border-blue-200 bg-blue-50/50 rounded-lg p-3 text-center">
+                    <p class="text-xs font-bold text-blue-800">
+                        Data Quality: High (Audio Length: {{ "%.1f"|format(clinical_data.audio_duration) }} seconds)
+                    </p>
+                </div>
+                {% endif %}
+
                 <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Explainable AI Analysis</h4>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
                     <ul class="space-y-2 text-sm text-slate-600">
