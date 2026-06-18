@@ -7,8 +7,6 @@ transfer learning, addressing class imbalance and applying safe data augmentatio
 It features a strict OpenCV preprocessing pipeline to eliminate training-serving skew
 and utilizes a Two-Phase Fine-Tuning strategy to maximize accuracy.
 
-Author: Senior Python Machine Learning Engineer
-Target: NeuroScreen Web App (Flask + TensorFlow) - ASEP-2 Project
 """
 
 import os

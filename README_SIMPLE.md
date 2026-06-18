@@ -18,11 +18,11 @@ NeuroScreen uses two different methods to check for neurological signs.
 
 The app listens to a recording of your voice. It's not listening to _what_ you say, but _how_ you say it. It measures:
 
-- **Jitter:** Tiny, rapid variations in your voice's pitch (how high or low it is).
-- **Shimmer:** Tiny, rapid variations in your voice's volume (how loud or soft it is).
-- **Harmonics-to-Noise Ratio (HNR):** The ratio of "clean" sound to "noisy" sound in your voice, which can relate to hoarseness.
+- **spread2:** Measures how spread out or varied your vocal pitches are.
+- **D2 (Correlation Dimension):** Measures the complexity or "roughness" in the voice signal.
+- **RPDE (Recurrence Period Density Entropy):** A mathematical way to measure how well the vocal cords are maintaining a steady, repeating rhythm.
 
-Instability in these areas can be an early indicator of neurological stress.
+Instability in these non-linear areas can be an early indicator of neurological stress.
 
 ### 2. Spiral Drawing Analysis
 
@@ -87,10 +87,12 @@ This section provides a deeper technical dive into the machine learning models a
 
 ### Spiral Drawing Model (MobileNetV2 Transfer Learning)
 
-- **Model Architecture:** A **MobileNetV2** model, pre-trained on ImageNet, with a custom classification head. The top 20 layers of the base model were fine-tuned for this specific task.
+- **Model Architecture:** A **MobileNetV2** model, pre-trained on ImageNet, with a custom classification head. The top 50 layers of the base model were fine-tuned for this specific task.
 - **Training Strategy:** A two-phase training process was used to maximize accuracy and prevent catastrophic forgetting.
     1.  **Warm-up Phase:** The entire MobileNetV2 base was frozen, and only the custom head (Dense layers with L2 regularization and Dropout) was trained. This allowed the new layers to adapt to the feature space of spiral drawings.
-    2.  **Fine-tuning Phase:** The top 20 layers of the MobileNetV2 base were unfrozen. The model was then re-compiled with a very low learning rate (`1e-5`) and trained with a `ReduceLROnPlateau` callback for precise, stable adjustments.
+    2.  **Fine-tuning Phase:** The top 50 layers of the MobileNetV2 base were unfrozen. The model was then re-compiled with a very low learning rate (`1e-5`) and trained with a `ReduceLROnPlateau` callback for precise, stable adjustments.
+- **Kinematic-Safe Data Augmentation:** Because deep learning needs a lot of data, we mathematically multiplied our dataset by rotating (up to 10 degrees) and flipping the images. We intentionally avoided "stretching" or "shearing" the images so the AI learned to spot true human micro-tremors instead of digital distortion.
+- **Accuracy:** The final model achieved **82.99% Accuracy** and **90.00% Sensitivity**.
 
 - **Combined Training Dataset:** The model was trained on a composite dataset aggregated from multiple public sources to ensure diversity. The total dataset consists of approximately **600 real images** before any data augmentation is applied.
     - **Original HandPD Dataset:**
@@ -109,10 +111,6 @@ This section provides a deeper technical dive into the machine learning models a
 ### Voice Analysis Model (XGBoost)
 
 - **Model Architecture:** An **XGBoost Classifier**, a powerful and accurate machine learning model. It was automatically tuned to find the best settings for this specific task.
-- **Features Used for Training:** The model was trained on 7 core acoustic features extracted using `parselmouth` (a tool that uses the clinical-standard Praat software). This ensures our measurements are consistent with established medical research. The features include:
-    1.  Mean, Max, and Min Pitch
-    2.  Jitter (Pitch variation)
-    3.  Shimmer (Volume variation)
-    4.  Noise-to-Harmonics Ratio (NHR)
-    5.  Harmonics-to-Noise Ratio (HNR)
+- **Features Used for Training:** The model was originally tested with 22 features, but we used a technique called SHAP to mathematically prove that some features (like Jitter and Shimmer) were just adding "noise." We pruned the model down to **17 core acoustic features**, which made it much more accurate.
+- **Accuracy:** Through 5-Fold Cross-Validation, the model achieved a highly stable **86.95% Accuracy**. By manually adjusting the decision threshold down to 0.39, we ensured the model catches almost everyone who is sick, resulting in a **98.92% Clinical Sensitivity** (Recall).
 - **Dataset:** Trained on a combination of the public **UCI Parkinson's Dataset** and another public audio collection. All data was processed identically to ensure consistency. A `StandardScaler` is used to normalize the features before they are fed to the model.

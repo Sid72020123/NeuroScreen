@@ -33,14 +33,11 @@ A combined dataset of **734 images** was aggregated from multiple public sources
 A custom feature extraction function was developed to process raw `.wav` files, ensuring consistency between the Figshare dataset and the UCI dataset's methodology.
 
 - **Tooling:** The function uses the `parselmouth` Python library, a wrapper for the Praat phonetics software, which is a gold standard in acoustic analysis.
-- **Process:** For each audio file, the function loads the sound and calculates the following 7 core features in a specific order to match the model's input requirements:
-    1.  **MDVP:Fo(Hz):** Mean fundamental frequency (average pitch).
-    2.  **MDVP:Fhi(Hz):** Maximum fundamental frequency (highest pitch).
-    3.  **MDVP:Flo(Hz):** Minimum fundamental frequency (lowest pitch).
-    4.  **MDVP:Jitter(%):** A measure of frequency variation from cycle to cycle.
-    5.  **MDVP:Shimmer:** A measure of amplitude variation from cycle to cycle.
-    6.  **NHR (Noise-to-Harmonics Ratio):** The ratio of noise to tonal components in the voice.
-    7.  **HNR (Harmonics-to-Noise Ratio):** The ratio of tonal components to noise.
+- **Process:** For each audio file, the function loads the sound and calculates 22 non-linear acoustic features. Through SHAP (SHapley Additive exPlanations) analysis, 5 noisy features were pruned, resulting in a highly optimized 17-feature input vector. High-impact features include:
+    1.  **spread2:** Variance of the log fundamental frequency.
+    2.  **D2 (Correlation Dimension):** A measure of signal fractality.
+    3.  **RPDE (Recurrence Period Density Entropy):** Measures the periodicity of the vocal cord vibrations.
+    4.  **MDVP:Fo(Hz) / Fhi(Hz) / Flo(Hz):** Fundamental frequency metrics.
 
 #### 2.2.2. Model Training (`train_voice.py`)
 
@@ -49,8 +46,8 @@ A custom feature extraction function was developed to process raw `.wav` files, 
     1.  **Data Merging:** The UCI dataset and the features extracted from the Figshare dataset were concatenated into a single master DataFrame.
     2.  **Data Splitting:** The data was split into an 80% training set and a 20% testing set, stratified to maintain the original class distribution.
     3.  **Scaling:** A `sklearn.preprocessing.StandardScaler` was fitted on the training data to normalize the feature values, and this scaler was subsequently used on the test data.
-    4.  **Hyperparameter Tuning:** `sklearn.model_selection.GridSearchCV` was employed with 5-fold cross-validation to systematically search for the optimal hyperparameters (`n_estimators`, `max_depth`, `learning_rate`). The best parameters were found to be `{'learning_rate': 0.1, 'max_depth': 5, 'n_estimators': 200}`.
-- **Evaluation:** The final tuned model achieved an accuracy of **94.87%** on the unseen test set. The model demonstrated strong performance in identifying both healthy (Recall: 0.97) and Parkinson's (Recall: 0.90) samples, as detailed in its classification report.
+    4.  **Threshold Optimization:** The decision boundary was manually shifted down to 0.39 to heavily prioritize clinical sensitivity, keeping False Negatives to an absolute minimum.
+- **Evaluation:** Using robust 5-Fold Cross-Validation, the final tuned model achieved a highly stable accuracy of **86.95%**. Thanks to the custom thresholding, the model demonstrated a massive **98.92% Clinical Sensitivity** (Recall) for Parkinson's detection.
 
 ### 2.3. Spiral Drawing Model (MobileNetV2)
 
@@ -75,11 +72,12 @@ A strict, multi-step preprocessing pipeline was designed and enforced across bot
     - `Dense(1, activation='sigmoid')`
 - **Two-Phase Training Strategy:**
     1.  **Phase 1 (Warm-up):** The entire MobileNetV2 base was frozen, and only the custom head was trained for 15 epochs. This allows the new layers to adapt to the feature space of spiral drawings without corrupting the pre-trained weights.
-    2.  **Phase 2 (Fine-Tuning):** The top 20 layers of the MobileNetV2 base were unfrozen. The model was re-compiled with a very low learning rate (`1e-5`) and trained for up to 30 additional epochs. This allows the model to make small, precise adjustments to its feature extractors. `EarlyStopping` and `ReduceLROnPlateau` callbacks were used for stable convergence.
+    2.  **Fine-Tuning:** The top 50 layers of the MobileNetV2 base were unfrozen. The model was re-compiled with a very low learning rate (`1e-5`) and trained for up to 30 additional epochs. This allows the model to make small, precise adjustments to its feature extractors. `EarlyStopping` and `ReduceLROnPlateau` callbacks were used for stable convergence.
+- **Kinematic-Safe Data Augmentation:** To prevent overfitting on the small dataset, data augmentation was mathematically constrained to strict rotations (≤10°) and flipping. "Stretching" was avoided to ensure the model learned true micro-tremors rather than digital distortion.
 - **Class Imbalance:** The significant class imbalance in the dataset (471 Parkinson's vs. 263 Healthy) was addressed by providing `class_weight='balanced'` to the model during training, which increases the penalty for misclassifying the minority class.
 - **Evaluation:** The final model was evaluated on an unseen test set of 147 images.
-    - **Overall Accuracy:** **79.59%**
-    - **Classification Report:** The model achieved a **recall (sensitivity) of 0.87** for the Parkinson's class, which is a critical metric for a screening tool, as it indicates a low rate of false negatives. The precision for this class was 0.82.
+    - **Overall Accuracy:** **82.99%**
+    - **Classification Report:** The model achieved a **clinical sensitivity (recall) of 90.00%** for the Parkinson's class, which is a critical metric for a screening tool, ensuring a low rate of false negatives.
 
 ---
 

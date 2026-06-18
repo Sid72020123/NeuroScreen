@@ -1,5 +1,13 @@
 import json
 import os
+import warnings
+
+# Suppress TensorFlow C++ logs (e.g. CUDA cuInit errors)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+# Suppress Keras structure warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="keras")
+warnings.filterwarnings("ignore", message=".*The structure of `inputs` doesn't match the expected structure.*")
+
 from datetime import datetime
 from io import BytesIO
 from zoneinfo import ZoneInfo
