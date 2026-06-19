@@ -1,0 +1,17 @@
+Flask
+Flask-Login
+Flask-SQLAlchemy
+Werkzeug
+SQLAlchemy
+opencv-python-headless
+praat-parselmouth
+joblib
+tensorflow
+numpy
+pandas
+librosa
+matplotlib
+nolds
+fpdf
+xgboost
+scikit-learn

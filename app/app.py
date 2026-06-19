@@ -62,7 +62,7 @@ from config import Config
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 SAVED_MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
-SPIRAL_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "spiral_model.h5")
+SPIRAL_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "spiral_model.keras")
 VOICE_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "xgboost_pruned_model.pkl")
 VOICE_SCALER_PATH = os.path.join(SAVED_MODELS_DIR, "standard_scaler_pruned.pkl")
 CUSTOM_THRESHOLD = 0.39

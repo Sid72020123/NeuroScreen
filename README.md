@@ -113,17 +113,37 @@ Follow these steps to run the NeuroScreen application on your local machine.
     .\venv\Scripts\activate
     ```
 
-3.  **Install Dependencies**
+3.  **Install App Dependencies**
+
+    Navigate to the `app` directory and install the required packages:
 
     ```bash
+    cd app
     pip install -r requirements.txt
     ```
 
 4.  **Run the Flask Application**
 
     ```bash
-    python app/app.py
+    python app.py
     ```
 
 5.  **Access NeuroScreen**
     Open your web browser and navigate to `http://127.0.0.1:5000`.
+
+---
+
+## 7. Group Details
+
+**Group No.:** 11  
+**Batch & Div.:** CS(SE) - C  
+**Academic Year:** 2025 - 2026 (Semester 1)  
+
+### Group Members
+
+| Member Name      | Github Username  | Email ID                     | Role                   |
+| ---------------- | ---------------- | ---------------------------- | ---------------------- |
+| Surabhi Yadav    | @surabhiyadav11  | surabhi.1251080184@vit.edu   | Group Leader           |
+| Siddhesh Chavan  | @Sid72020123     | siddhesh.1251080264@vit.edu  | Assistant Group Leader |
+| Sparsh Zalwade   | @sparshzalwade   | sparsh.1251080260@vit.edu    | Member                 |
+| Punam Surana     | @suranapunam07   | punam.1251080097@vit.edu     | Member                 |

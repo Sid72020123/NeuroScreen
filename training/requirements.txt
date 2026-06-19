@@ -1,0 +1,10 @@
+opencv-python-headless
+numpy
+tensorflow
+scikit-learn
+pandas
+xgboost
+matplotlib
+seaborn
+joblib
+shap

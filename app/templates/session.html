@@ -200,6 +200,46 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Voice Biomarkers Glossary / Explanation -->
+                <div class="mt-8">
+                    <details class="group border border-slate-200 bg-white rounded-xl shadow-sm [&_summary::-webkit-details-marker]:hidden">
+                        <summary class="flex cursor-pointer items-center justify-between gap-1.5 rounded-xl bg-slate-50 p-4 text-slate-900 font-bold uppercase tracking-wide text-sm border-b border-transparent group-open:border-slate-200">
+                            Understanding Your Voice Metrics (Glossary)
+                            <svg class="h-5 w-5 shrink-0 transition duration-300 group-open:-rotate-180 text-teal-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </summary>
+
+                        <div class="p-4 bg-white text-sm text-slate-600 space-y-4 rounded-b-xl max-h-96 overflow-y-auto">
+                            <div>
+                                <h5 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-1">Acoustic Spectrogram Heatmap</h5>
+                                <p>A <strong>Mel-Spectrogram</strong> is a visual representation of the spectrum of frequencies of a sound as it varies with time. Parkinson's patients often exhibit "frayed", blurry, or interrupted horizontal bands on the spectrogram, which indicates vocal cord instability (dysarthria) and air leakage during phonation.</p>
+                            </div>
+                            
+                            <div>
+                                <h5 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-1">High-Impact Biomarkers</h5>
+                                <ul class="list-disc pl-4 space-y-2">
+                                    <li><strong>spread2 (Vocal Fold Spread):</strong> Measures the variance of the fundamental frequency (pitch). A higher value indicates irregular vocal fold vibration, typical of neurodegenerative tremors.</li>
+                                    <li><strong>D2 (Correlation Dimension):</strong> A non-linear fractal dimension metric that evaluates the complexity of the vocal signal. Irregular, rough, or hoarse voices score much higher.</li>
+                                    <li><strong>RPDE (Recurrence Period Density Entropy):</strong> Measures the periodicity of the vocal signal. Healthy voices are highly periodic (low RPDE), whereas Parkinson's voices exhibit chaotic, non-periodic patterns (high RPDE).</li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h5 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-1">Other Vocal Biomarkers</h5>
+                                <ul class="list-disc pl-4 space-y-2">
+                                    <li><strong>Jitter (%, Abs, RAP, PPQ, DDP):</strong> Various metrics that measure cycle-to-cycle variations of fundamental frequency (pitch perturbations). High jitter means the voice sounds rough or scratchy.</li>
+                                    <li><strong>Shimmer (%, dB, APQ3, APQ5, APQ, DDA):</strong> Various metrics that measure cycle-to-cycle variations of the voice amplitude (volume perturbations). High shimmer means the voice sounds breathy.</li>
+                                    <li><strong>NHR & HNR (Noise/Harmonics Ratio):</strong> Evaluate the ratio of acoustic noise to harmonic sound. A high NHR or low HNR indicates significant background vocal noise, typically caused by incomplete vocal fold closure.</li>
+                                    <li><strong>DFA (Detrended Fluctuation Analysis):</strong> Measures the extent of stochastic acoustic noise in the speech signal.</li>
+                                    <li><strong>PPE (Pitch Period Entropy):</strong> Measures the lack of control in pitch over time, heavily correlated with impaired motor control of vocal folds.</li>
+                                    <li><strong>Fo, Fhi, Flo (Hz):</strong> Baseline, maximum, and minimum vocal pitch frequencies.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </details>
+                </div>
                 {% else %}
                 <div class="flex flex-col flex-grow items-center justify-center text-center">
                     <div class="bg-slate-100 p-4 rounded-full mb-4 text-slate-400">
