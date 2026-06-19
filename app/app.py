@@ -632,9 +632,10 @@ def build_report_pdf(session_record):
     pdf.set_fill_color(248, 250, 252)
     pdf.set_font("Helvetica", "B", 10)
     
-    pdf.cell(page_width / 3, 10, f" Patient: {session_record.user.username}", border="L T B", fill=True, ln=0)
-    pdf.cell(page_width / 3, 10, f" Session ID: #{session_data['session_number']}", border="T B", fill=True, align="C", ln=0)
-    pdf.cell(page_width / 3, 10, f" Date: {session_data['date']}", border="R T B", fill=True, align="R", ln=1)
+    pdf.cell(page_width / 4, 10, f" Patient: {session_record.user.username}", border="L T B", fill=True, ln=0)
+    pdf.cell(page_width / 4, 10, f" Session ID: #{session_data['session_number']}", border="T B", fill=True, align="C", ln=0)
+    pdf.cell(page_width / 4, 10, f" Meds: {session_data.get('medication_state', 'N/A')}", border="T B", fill=True, align="C", ln=0)
+    pdf.cell(page_width / 4, 10, f" Date: {session_data['full_timestamp']}", border="R T B", fill=True, align="R", ln=1)
     pdf.ln(10)
 
     # --- 1. Overall Neurological Risk Assessment ---
@@ -1048,7 +1049,8 @@ def clinician_dashboard():
                 "age": patient.age,
                 "gender": patient.gender,
                 "total_sessions": len(sessions),
-                "last_screening_date": recent_session.timestamp.strftime("%Y-%m-%d"),
+                "recent_session_id": recent_session.id,
+                "last_screening_date": format_timestamp(recent_session.timestamp) if recent_session.timestamp else "N/A",
                 "risk_score": recent_session.final_score,
                 "score_classes": get_score_classes(recent_session.final_score) if recent_session.final_score is not None else None
             })
@@ -1530,6 +1532,41 @@ def history():
     )
 
 
+@app.route("/delete_session/<int:session_id>", methods=["POST"])
+@login_required
+def delete_session(session_id):
+    session_record = ScreeningSession.query.filter_by(id=session_id, user_id=current_user.id).first()
+    if session_record:
+        db.session.delete(session_record)
+        db.session.commit()
+        flash("Session successfully deleted.", "success")
+    else:
+        flash("Session not found or unauthorized.", "danger")
+    return redirect(url_for("history"))
+
+
+@app.route("/settings", methods=["GET", "POST"])
+@login_required
+def settings():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        age_val = request.form.get("age", "")
+        gender = request.form.get("gender", "")
+        
+        if not username:
+            flash("Name cannot be empty.", "danger")
+            return redirect(url_for("settings"))
+            
+        current_user.username = username
+        current_user.age = int(age_val) if age_val.isdigit() else None
+        current_user.gender = gender
+        db.session.commit()
+        flash("Profile settings updated successfully!", "success")
+        return redirect(url_for("settings"))
+        
+    return render_template("settings.html")
+
+
 @app.route("/api/generate_report/", methods=["GET"])
 @login_required
 def generate_report():
@@ -1537,9 +1574,13 @@ def generate_report():
     if session_id is None:
         abort(400)
 
-    session_record = ScreeningSession.query.filter_by(
-        id=session_id, user_id=current_user.id
-    ).first()
+    if current_user.is_doctor:
+        session_record = ScreeningSession.query.filter_by(id=session_id).first()
+    else:
+        session_record = ScreeningSession.query.filter_by(
+            id=session_id, user_id=current_user.id
+        ).first()
+        
     if session_record is None:
         abort(404)
 

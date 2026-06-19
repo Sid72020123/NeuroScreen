@@ -23,6 +23,7 @@
                         <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sessions</th>
                         <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Last Screening</th>
                         <th scope="col" class="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recent Risk Score</th>
+                        <th scope="col" class="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-slate-200">
@@ -44,10 +45,17 @@
                             <span class="text-slate-400 italic">Pending</span>
                             {% endif %}
                         </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                            {% if patient.recent_session_id and patient.risk_score is not none %}
+                            <a href="{{ url_for('generate_report', session_id=patient.recent_session_id) }}" class="text-teal-600 hover:text-teal-800 font-semibold text-xs border border-teal-200 bg-teal-50 px-3 py-1 rounded-md transition-colors shadow-sm">Get PDF</a>
+                            {% else %}
+                            <span class="text-slate-400 italic text-xs">N/A</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="px-6 py-8 text-center text-slate-500">No patient data available.</td>
+                        <td colspan="7" class="px-6 py-8 text-center text-slate-500">No patient data available.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
