@@ -137,13 +137,13 @@ Follow these steps to run the NeuroScreen application on your local machine.
 
 **Group No.:** 11  
 **Batch & Div.:** CS(SE) - C  
-**Academic Year:** 2025 - 2026 (Semester 1)  
+**Academic Year:** 2025 - 2026 (Semester 2)  
 
 ### Group Members
 
-| Member Name      | Github Username  | Email ID                     | Role                   |
-| ---------------- | ---------------- | ---------------------------- | ---------------------- |
-| Surabhi Yadav    | @surabhiyadav11  | surabhi.1251080184@vit.edu   | Group Leader           |
-| Siddhesh Chavan  | @Sid72020123     | siddhesh.1251080264@vit.edu  | Assistant Group Leader |
-| Sparsh Zalwade   | @sparshzalwade   | sparsh.1251080260@vit.edu    | Member                 |
-| Punam Surana     | @suranapunam07   | punam.1251080097@vit.edu     | Member                 |
+| Member Name      | Github Username                                         | Email ID                     | Role                   |
+| ---------------- | ------------------------------------------------------- | ---------------------------- | ---------------------- |
+| Surabhi Yadav    | [@surabhiyadav11](https://github.com/surabhiyadav11)    | surabhi.1251080184@vit.edu   | Group Leader           |
+| Siddhesh Chavan  | [@Sid72020123](https://github.com/Sid72020123)          | siddhesh.1251080264@vit.edu  | Assistant Group Leader |
+| Sparsh Zalwade   | [@sparshzalwade](https://github.com/sparshzalwade)      | sparsh.1251080260@vit.edu    | Member                 |
+| Punam Surana     | [@suranapunam07](https://github.com/suranapunam07)      | punam.1251080097@vit.edu     | Member                 |
