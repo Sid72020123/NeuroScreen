@@ -37,7 +37,16 @@
 
     {% if sessions %}
     <div class="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-slate-200">
-        <h3 class="text-lg font-semibold text-slate-800 mb-4">Final Score Trend</h3>
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-slate-800">Longitudinal Trend Analysis</h3>
+            <select id="trendSelector" class="px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-700 focus:outline-none focus:ring-teal-500 focus:border-teal-500">
+                <option value="final_score">Final Risk Score</option>
+                <option value="spread2">Vocal Fold Spread (spread2)</option>
+                <option value="D2">Correlation Dimension (D2)</option>
+                <option value="RPDE">Vocal Noise Variance (RPDE)</option>
+                <option value="kinematic_variance">Kinematic Tremor Variance</option>
+            </select>
+        </div>
         <canvas id="historyChart"></canvas>
     </div>
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200">
@@ -154,44 +163,87 @@
             return;
         }
 
-        const labels = [];
-        const data = [];
-
-        // Data from backend is newest to oldest, so we reverse it for the chart.
-        sessionsData.reverse().forEach(session => {
-            if (session.final_score !== null) {
-                labels.push(session.date);
-                data.push(session.final_score);
-            }
-        });
-
         const ctx = document.getElementById("historyChart").getContext("2d");
-        new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: "Final Risk Score",
-                        data: data,
-                        borderColor: "#0d9488", // teal-700
-                        backgroundColor: "rgba(13, 148, 136, 0.1)",
-                        fill: true,
-                        tension: 0.1,
-                        pointBackgroundColor: "#0d9488",
-                        pointRadius: 4,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                    },
+        let historyChart = null;
+
+        function renderChart(metricKey) {
+            const labels = [];
+            const data = [];
+            const pointColors = [];
+            
+            // Data from backend is newest to oldest, reverse it for chart
+            const sortedSessions = [...sessionsData].reverse();
+            
+            sortedSessions.forEach(session => {
+                let value = null;
+                if (metricKey === 'final_score') value = session.final_score;
+                else if (metricKey === 'kinematic_variance') value = session.kinematic_variance;
+                else if (session.voice_metrics && session.voice_metrics[metricKey] !== undefined) {
+                    value = session.voice_metrics[metricKey];
+                }
+                
+                if (value !== null) {
+                    labels.push(session.date);
+                    data.push(value);
+                    
+                    if (session.medication_state === 'ON') {
+                        pointColors.push('#10b981'); // emerald
+                    } else if (session.medication_state === 'OFF') {
+                        pointColors.push('#ef4444'); // red
+                    } else {
+                        pointColors.push('#0d9488'); // teal
+                    }
+                }
+            });
+
+            if (historyChart) historyChart.destroy();
+
+            historyChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: document.getElementById('trendSelector').options[document.getElementById('trendSelector').selectedIndex].text,
+                            data: data,
+                            borderColor: "#0d9488",
+                            backgroundColor: "rgba(13, 148, 136, 0.1)",
+                            fill: true,
+                            tension: 0.1,
+                            pointBackgroundColor: pointColors,
+                            pointBorderColor: pointColors,
+                            pointRadius: 5,
+                            pointHoverRadius: 7,
+                        },
+                    ],
                 },
-            },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: (metricKey === 'final_score' || metricKey === 'kinematic_variance') ? 100 : undefined
+                        },
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const session = sortedSessions[context.dataIndex];
+                                    const med = session ? session.medication_state : 'Unknown';
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} (Medication Phase: ${med})`;
+                                }
+                            }
+                        }
+                    }
+                },
+            });
+        }
+
+        renderChart('final_score');
+
+        document.getElementById('trendSelector').addEventListener('change', function(e) {
+            renderChart(e.target.value);
         });
     });
 </script>

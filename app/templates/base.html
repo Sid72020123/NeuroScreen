@@ -48,6 +48,9 @@
                             class="text-sm font-semibold text-slate-600 hover:text-teal-600 transition-colors"
                             >Model Statistics</a
                         >
+                        {% if current_user.is_doctor %}
+                        <a href="{{ url_for('clinician_dashboard') }}" class="text-sm font-bold text-rose-600 hover:text-rose-700 transition-colors border border-rose-200 bg-rose-50 px-3 py-1 rounded-md ml-4">Clinician Portal</a>
+                        {% endif %}
                     </nav>
                     {% endif %}
                 </div>

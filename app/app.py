@@ -7,6 +7,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 # Suppress Keras structure warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="keras")
 warnings.filterwarnings("ignore", message=".*The structure of `inputs` doesn't match the expected structure.*")
+# Suppress expected fallback behavior in nolds nonlinear math equations
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="nolds")
 
 from datetime import datetime
 from io import BytesIO
@@ -195,6 +197,9 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    age = db.Column(db.Integer, nullable=True)
+    gender = db.Column(db.String(10), nullable=True)
+    is_doctor = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     sessions = db.relationship(
@@ -216,6 +221,7 @@ class ScreeningSession(db.Model):
     final_score = db.Column(db.Float, nullable=True)
     voice_metrics = db.Column(db.Text, nullable=True)
     spiral_metrics = db.Column(db.Text, nullable=True)
+    medication_state = db.Column(db.String(20), default="UNMEDICATED")
 
 
 @login_manager.user_loader
@@ -241,6 +247,21 @@ def ensure_database_schema():
                         "ALTER TABLE screening_sessions ADD COLUMN spiral_metrics TEXT"
                     )
                 )
+            if "medication_state" not in columns:
+                connection.execute(
+                    text("ALTER TABLE screening_sessions ADD COLUMN medication_state VARCHAR(20) DEFAULT 'UNMEDICATED'")
+                )
+
+        user_columns = {
+            column["name"] for column in inspector.get_columns("users")
+        }
+        with db.engine.begin() as connection:
+            if "age" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN age INTEGER"))
+            if "gender" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN gender VARCHAR(10)"))
+            if "is_doctor" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN is_doctor BOOLEAN DEFAULT 0"))
 
 
 def wants_json_response():
@@ -414,30 +435,39 @@ def update_final_score(session_record):
     session_record.final_score = round(sum(scores) / len(scores), 1) if scores else None
 
 
-def generate_clinical_analysis(features_dict):
+def generate_clinical_analysis(features_dict, user=None):
     analysis_points = []
+    
+    spread2_ref = ALL_BIOMARKER_REFERENCE.get("spread2", {}).get("value", 0.2)
+    d2_ref = ALL_BIOMARKER_REFERENCE.get("D2", {}).get("value", 2.2)
+    rpde_ref = ALL_BIOMARKER_REFERENCE.get("RPDE", {}).get("value", 0.5)
+    
+    if user:
+        if user.gender and user.gender.lower() == "female":
+            spread2_ref *= 1.1
+            rpde_ref *= 1.05
+        if user.age and user.age > 65:
+            spread2_ref *= 1.15
+            d2_ref *= 1.1
     
     spread2 = parse_float(features_dict.get("spread2"))
     if spread2 is not None:
-        ref = ALL_BIOMARKER_REFERENCE.get("spread2", {}).get("value", 0.2)
-        if spread2 > ref:
-            analysis_points.append(f"Vocal Fold Spread (spread2) is elevated at {spread2:.4f}, suggesting potential vocal impairment.")
+        if spread2 > spread2_ref:
+            analysis_points.append(f"Vocal Fold Spread (spread2) is elevated at {spread2:.4f} (Baseline: {spread2_ref:.4f}), suggesting potential vocal impairment.")
         else:
-            analysis_points.append(f"Vocal Fold Spread (spread2) is within normal parameters ({spread2:.4f}).")
+            analysis_points.append(f"Vocal Fold Spread (spread2) is within normal demographic parameters ({spread2:.4f} <= {spread2_ref:.4f}).")
 
     d2 = parse_float(features_dict.get("D2"))
     if d2 is not None:
-        ref = ALL_BIOMARKER_REFERENCE.get("D2", {}).get("value", 2.2)
-        if d2 > ref:
-            analysis_points.append(f"Correlation Dimension (D2) indicates irregular vocal patterns ({d2:.4f} > {ref}).")
+        if d2 > d2_ref:
+            analysis_points.append(f"Correlation Dimension (D2) indicates irregular vocal patterns ({d2:.4f} > {d2_ref:.4f}).")
         else:
-            analysis_points.append(f"Correlation Dimension (D2) indicates stable phonation ({d2:.4f}).")
+            analysis_points.append(f"Correlation Dimension (D2) indicates stable phonation for demographics ({d2:.4f}).")
 
     rpde = parse_float(features_dict.get("RPDE"))
     if rpde is not None:
-        ref = ALL_BIOMARKER_REFERENCE.get("RPDE", {}).get("value", 0.5)
-        if rpde > ref:
-            analysis_points.append(f"RPDE score is {rpde:.4f}, showing increased vocal noise variance compared to baseline.")
+        if rpde > rpde_ref:
+            analysis_points.append(f"RPDE score is {rpde:.4f}, showing increased vocal noise variance compared to baseline ({rpde_ref:.4f}).")
         else:
             analysis_points.append(f"RPDE score is controlled at {rpde:.4f}, indicating healthy vocal variance.")
 
@@ -522,9 +552,10 @@ def serialize_session(session_record, session_number=None):
             spiral_metrics = {}
 
     timestamp_text = format_timestamp(session_record.timestamp)
-    voice_analysis = generate_clinical_analysis(voice_metrics) if voice_metrics else []
+    voice_analysis = generate_clinical_analysis(voice_metrics, getattr(session_record, 'user', None)) if voice_metrics else []
     return {
         "id": session_record.id,
+        "medication_state": getattr(session_record, "medication_state", "UNMEDICATED"),
         "session_number": session_number,
         "date": (
             session_record.timestamp.strftime("%Y-%m-%d")
@@ -898,6 +929,12 @@ def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        age_val = request.form.get("age", "")
+        gender = request.form.get("gender", "")
+        doctor_code = request.form.get("doctor_code", "")
+        
+        age = int(age_val) if age_val.isdigit() else None
+        is_doctor = (doctor_code == "NEURO2026")
 
         if not username or not password:
             flash("Name and password are required.", "danger")
@@ -914,6 +951,9 @@ def register():
         user = User(
             username=username,
             password_hash=generate_password_hash(password),
+            age=age,
+            gender=gender,
+            is_doctor=is_doctor,
         )
         db.session.add(user)
         db.session.commit()
@@ -961,7 +1001,8 @@ def logout():
 @login_required
 def dashboard():
     if request.method == "POST":
-        session_record = ScreeningSession(user_id=current_user.id)
+        medication_state = request.form.get("medication_state", "UNMEDICATED")
+        session_record = ScreeningSession(user_id=current_user.id, medication_state=medication_state)
         db.session.add(session_record)
         db.session.commit()
         flash("New screening session created.", "success")
@@ -985,6 +1026,37 @@ def dashboard():
         ),
         total_sessions=total_sessions,
     )
+
+
+@app.route("/clinician")
+@login_required
+def clinician_dashboard():
+    if not current_user.is_doctor:
+        flash("Unauthorized access. Clinician portal only.", "danger")
+        return redirect(url_for("dashboard"))
+        
+    patients = User.query.filter_by(is_doctor=False).all()
+    patient_data = []
+    
+    for patient in patients:
+        sessions = ScreeningSession.query.filter_by(user_id=patient.id).order_by(ScreeningSession.timestamp.desc()).all()
+        if sessions:
+            recent_session = sessions[0]
+            patient_data.append({
+                "patient_id": patient.id,
+                "username": patient.username,
+                "age": patient.age,
+                "gender": patient.gender,
+                "total_sessions": len(sessions),
+                "last_screening_date": recent_session.timestamp.strftime("%Y-%m-%d"),
+                "risk_score": recent_session.final_score,
+                "score_classes": get_score_classes(recent_session.final_score) if recent_session.final_score is not None else None
+            })
+            
+    # Sort by highest risk score first
+    patient_data.sort(key=lambda x: (x["risk_score"] is None, -(x["risk_score"] or 0)))
+    
+    return render_template("clinician_dashboard.html", patients=patient_data)
 
 
 @app.route("/model_info")
@@ -1052,6 +1124,23 @@ def session_hub(session_id):
     return render_template(
         "session.html", session_record=serialized, clinical_data=clinical_data
     )
+
+
+@app.route("/update_medication/<int:session_id>", methods=["POST"])
+@login_required
+def update_medication(session_id):
+    session_record = resolve_session(session_id)
+    if not session_record:
+        flash("Session not found.", "danger")
+        return redirect(url_for("dashboard"))
+
+    medication_state = request.form.get("medication_state")
+    if medication_state in ["UNMEDICATED", "ON", "OFF"]:
+        session_record.medication_state = medication_state
+        db.session.commit()
+        flash(f"Medication phase tracked successfully.", "success")
+        
+    return redirect(url_for("session_hub", session_id=session_id))
 
 
 @app.route("/test/voice/", defaults={"session_id": None})

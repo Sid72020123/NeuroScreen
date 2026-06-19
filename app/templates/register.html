@@ -31,6 +31,26 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="age" class="block text-sm font-medium text-slate-700">Age</label>
+                    <input id="age" name="age" type="number" min="1" max="120" class="mt-1 w-full px-4 py-3 text-slate-900 bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                </div>
+                <div>
+                    <label for="gender" class="block text-sm font-medium text-slate-700">Biological Sex</label>
+                    <select id="gender" name="gender" class="mt-1 w-full px-4 py-3 text-slate-900 bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                        <option value="">Select...</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label for="doctor_code" class="block text-sm font-medium text-slate-700">Clinician Code (Optional)</label>
+                <input id="doctor_code" name="doctor_code" type="password" placeholder="For medical professionals only" class="mt-1 w-full px-4 py-3 text-slate-900 bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+            </div>
+
             <div>
                 <button
                     type="submit"
