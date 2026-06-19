@@ -20,6 +20,10 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import librosa
+import librosa.display
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import nolds
 from flask import (
     Flask,
@@ -542,6 +546,7 @@ def serialize_session(session_record, session_number=None):
         "voice_metrics": voice_metrics,
         "voice_analysis": voice_analysis,
         "spiral_analysis": spiral_metrics.get("analysis", []),
+        "voice_xai_image_url": voice_metrics.get("voice_xai_path"),
         "spiral_xai_image_url": spiral_metrics.get("xai_image_url"),
         "spiral_original_image_url": spiral_metrics.get("original_image_url"),
         "kinematic_variance": spiral_metrics.get("kinematic_variance"),
@@ -764,6 +769,21 @@ def build_report_pdf(session_record):
             pdf.image(xai_path, w=img_w, x=(pdf.w - img_w) / 2, y=y_img)
             pdf.set_y(y_img + img_w + 5)
 
+    voice_xai_url = session_data.get("voice_xai_image_url")
+    if voice_xai_url:
+        voice_xai_path = os.path.join(BASE_DIR, voice_xai_url.lstrip("/"))
+        if os.path.exists(voice_xai_path):
+            if pdf.get_y() + 60 > 260:
+                pdf.add_page()
+            pdf.ln(8)
+            y_img = pdf.get_y()
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(15, 23, 42)
+            pdf.text(15, y_img + 3, "Acoustic Spectrogram (Voice Heatmap)")
+            y_img += 5
+            pdf.image(voice_xai_path, w=170, x=15, y=y_img)
+            pdf.set_y(y_img + 60 + 5)
+
     pdf.ln(8)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(148, 163, 184)
@@ -777,6 +797,25 @@ def build_report_pdf(session_record):
     buffer.write(pdf_bytes)
     buffer.seek(0)
     return buffer
+
+
+def generate_voice_spectrogram(audio_path, session_id, user_id):
+    y, sr = librosa.load(audio_path, sr=None)
+    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=None)
+    S_dB = librosa.power_to_db(S, ref=np.max)
+    
+    plt.figure(figsize=(10, 4))
+    librosa.display.specshow(S_dB, x_axis='time', y_axis='mel', sr=sr, fmax=None, cmap='magma')
+    plt.colorbar(format='%+2.0f dB')
+    plt.title('Acoustic Mel-Spectrogram (Voice Heatmap)')
+    plt.tight_layout()
+    
+    user_uploads_dir = os.path.join(BASE_DIR, "static", "uploads", f"user_{user_id}")
+    os.makedirs(user_uploads_dir, exist_ok=True)
+    save_path = os.path.join(user_uploads_dir, f"session_{session_id}_voice_xai.jpg")
+    plt.savefig(save_path, format='jpg', dpi=150)
+    plt.close()
+    return f"/static/uploads/user_{user_id}/session_{session_id}_voice_xai.jpg"
 
 
 def generate_gradcam(
@@ -1127,6 +1166,7 @@ def upload_voice():
             key: float(value) for key, value in zip(ALL_22_FEATURES, feature_values)
         }
         features_dict["audio_duration"] = duration
+        features_dict["voice_xai_path"] = generate_voice_spectrogram(temp_path, session_record.id, current_user.id)
         session_record.voice_score = voice_score
         session_record.voice_metrics = json.dumps(features_dict, sort_keys=True)
         update_final_score(session_record)

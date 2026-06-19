@@ -101,6 +101,17 @@
                     </ul>
                 </div>
 
+                <!-- Voice Spectrogram XAI -->
+                {% if session_record.voice_xai_image_url %}
+                <h4 class="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Acoustic Spectrogram Heatmap</h4>
+                <div class="flex flex-col items-center border border-slate-200 p-4 rounded-xl bg-slate-50 mb-6 shadow-sm">
+                    <img src="{{ session_record.voice_xai_image_url }}" alt="Voice Spectrogram Heatmap" class="w-full h-auto object-contain rounded-lg border border-slate-200" />
+                    <p class="text-xs text-slate-500 italic text-center mt-3 px-4">
+                        This Mel-Spectrogram visualizes the power spectrum of the audio frequencies. "Frayed" or noisy bands indicate vocal cord instability (dysarthria).
+                    </p>
+                </div>
+                {% endif %}
+
                 <!-- Features Table -->
                 <h4 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wide">High-Impact Biomarkers</h4>
                 <div class="space-y-6">
@@ -147,7 +158,7 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-slate-200">
                                 {% for key, value in session_record.voice_metrics.items() %}
-                                    {% if key not in ['spread2', 'D2', 'RPDE', 'audio_duration'] %}
+                                    {% if key not in ['spread2', 'D2', 'RPDE', 'audio_duration', 'voice_xai_path'] %}
                                     {% set ref = clinical_data.biomarker_references.get(key) %}
                                     <tr class="hover:bg-slate-50 transition-colors">
                                         <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-slate-700">{{ key }}</td>
