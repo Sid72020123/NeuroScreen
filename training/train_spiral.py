@@ -31,7 +31,7 @@ BASE_DIR = "datasets/spiral"
 HEALTHY_DIR = os.path.join(BASE_DIR, "healthy")
 PARKINSONS_DIR = os.path.join(BASE_DIR, "parkinsons")
 MODEL_SAVE_DIR = "saved_models"
-MODEL_SAVE_PATH = os.path.join(MODEL_SAVE_DIR, "spiral_model.keras")
+MODEL_SAVE_PATH = os.path.join(MODEL_SAVE_DIR, "spiral_model.h5")
 
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
