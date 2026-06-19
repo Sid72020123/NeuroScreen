@@ -49,9 +49,7 @@ def main():
 
     # 1. Load the Model and Scaler
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
-        print(
-            "❌ Error: Could not find the trained model or scaler in 'saved_models/'."
-        )
+        print("❌ Error: Could not find the trained model or scaler in 'saved_models/'.")
         return
 
     print("Loading deployed XGBoost Model and StandardScaler...")
@@ -75,9 +73,7 @@ def main():
 
     # 3. Recreate the Exact Test Environment
     print("Recreating the test split and scaling features...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
     # Transform X_test using the loaded scaler
     X_test_scaled = scaler.transform(X_test)
@@ -132,9 +128,7 @@ def main():
     roc_auc = auc(fpr, tpr)
 
     plt.figure(figsize=(8, 6))
-    plt.plot(
-        fpr, tpr, color="#2ca02c", lw=2.5, label=f"XGBoost ROC (AUC = {roc_auc:.3f})"
-    )
+    plt.plot(fpr, tpr, color="#2ca02c", lw=2.5, label=f"XGBoost ROC (AUC = {roc_auc:.3f})")
     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--", alpha=0.7)
 
     plt.xlim([-0.02, 1.0])
@@ -240,9 +234,7 @@ def main():
     plt.figure(figsize=(10, 6))
     plt.plot(thresholds_eval, acc_scores, label="Accuracy", color="blue", lw=2)
     plt.plot(thresholds_eval, prec_scores, label="Precision", color="green", lw=2)
-    plt.plot(
-        thresholds_eval, rec_scores, label="Recall (Sensitivity)", color="orange", lw=2
-    )
+    plt.plot(thresholds_eval, rec_scores, label="Recall (Sensitivity)", color="orange", lw=2)
 
     # Draw vertical line for the optimal custom threshold
     plt.axvline(

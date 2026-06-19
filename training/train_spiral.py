@@ -12,7 +12,6 @@ and utilizes a Two-Phase Fine-Tuning strategy to maximize accuracy.
 import os
 import cv2
 import numpy as np
-import tensorflow as tf
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.models import Model
@@ -23,7 +22,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.regularizers import l2
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score
 
 # ==========================================
 # CONFIGURATION & HYPERPARAMETERS
@@ -46,7 +45,7 @@ PHASE_2_EPOCHS = 30
 def crop_to_spiral(img_array):
     """
     Aggressively crops the image tightly to all ink strokes.
-    Converts to grayscale, isolates ink, finds all contours, 
+    Converts to grayscale, isolates ink, finds all contours,
     calculates the absolute bounding box, and applies 10px padding.
     """
     # 1. Convert to grayscale, handling various input formats
@@ -168,9 +167,7 @@ def main():
 
     # 2. DATA SETUP & AUGMENTATION
     # 80/20 Stratified Split to preserve the class ratio
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, stratify=y, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, stratify=y, random_state=42)
     print(f"Training samples: {len(X_train)}, Testing samples: {len(X_test)}")
 
     # Compute class_weight to penalize minority class errors
@@ -199,9 +196,7 @@ def main():
     print("\n--- Starting Phase 1: Warm-up Training ---")
 
     # Load MobileNetV2 without top classification layer
-    base_model = MobileNetV2(
-        weights="imagenet", include_top=False, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3)
-    )
+    base_model = MobileNetV2(weights="imagenet", include_top=False, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
 
     # Freeze the entire base model
     base_model.trainable = False
@@ -251,13 +246,9 @@ def main():
     )
 
     # Setup Callbacks
-    early_stopping = EarlyStopping(
-        monitor="val_loss", patience=5, restore_best_weights=True, verbose=1
-    )
+    early_stopping = EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True, verbose=1)
 
-    reduce_lr = ReduceLROnPlateau(
-        monitor="val_loss", factor=0.5, patience=2, min_lr=1e-7, verbose=1
-    )
+    reduce_lr = ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=2, min_lr=1e-7, verbose=1)
 
     # Train Phase 2 for up to 30 additional epochs
     history_phase2 = model.fit(
@@ -281,11 +272,7 @@ def main():
     print(f"\nOverall Accuracy: {acc * 100:.2f}%")
 
     print("\nClassification Report:")
-    print(
-        classification_report(
-            y_test, y_pred, target_names=["Healthy (0)", "Parkinson's (1)"]
-        )
-    )
+    print(classification_report(y_test, y_pred, target_names=["Healthy (0)", "Parkinson's (1)"]))
 
     print("\n" + "=" * 60)
     print("CLINICAL REMINDER FOR NEUROSCREEN:")

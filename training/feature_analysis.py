@@ -1,15 +1,9 @@
 import os
-import glob
 import warnings
 import joblib
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import shap
-import librosa
-import nolds
-import parselmouth
-from parselmouth.praat import call
 from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings("ignore")
@@ -62,9 +56,7 @@ def main():
 
     # 1. Load the Model and Scaler
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
-        print(
-            "❌ Error: Could not find the trained model or scaler in 'saved_models/'."
-        )
+        print("❌ Error: Could not find the trained model or scaler in 'saved_models/'.")
         return
 
     print("Loading XGBoost Model and StandardScaler...")
@@ -74,9 +66,7 @@ def main():
     # 2. Load the Cached Dataset
     if not os.path.exists(CACHE_FILE):
         print(f"❌ Error: Cache file '{CACHE_FILE}' not found.")
-        print(
-            "Please run the updated 'train_voice_pruned.py' script first to generate the dataset cache."
-        )
+        print("Please run the updated 'train_voice_pruned.py' script first to generate the dataset cache.")
         return
 
     print("Loading cached dataset...")
@@ -101,9 +91,7 @@ def main():
     plt.figure(figsize=(12, 8))
 
     # Generate the plot (show=False prevents it from blocking the terminal)
-    shap.summary_plot(
-        shap_values, X_test_scaled, feature_names=ALL_22_FEATURES, show=False
-    )
+    shap.summary_plot(shap_values, X_test_scaled, feature_names=ALL_22_FEATURES, show=False)
 
     plot_filename = "shap_feature_importance.png"
     plt.savefig(plot_filename, dpi=300, bbox_inches="tight")
@@ -113,25 +101,15 @@ def main():
     print("\n" + "=" * 50)
     print("📊 HOW TO READ YOUR SHAP PLOT:")
     print("=" * 50)
-    print(
-        "1. Y-Axis (Top to Bottom): Features at the top are the MOST important to the model."
-    )
-    print(
-        "   Features at the very bottom are contributing almost nothing (or adding noise)."
-    )
+    print("1. Y-Axis (Top to Bottom): Features at the top are the MOST important to the model.")
+    print("   Features at the very bottom are contributing almost nothing (or adding noise).")
     print("2. X-Axis (Left to Right): Shows the impact on the prediction.")
-    print(
-        "   Dots pushed to the RIGHT increase the probability of a Parkinson's diagnosis."
-    )
+    print("   Dots pushed to the RIGHT increase the probability of a Parkinson's diagnosis.")
     print("   Dots pushed to the LEFT decrease the probability (Healthy).")
     print("3. Color (Blue to Red): Represents the actual value of the feature.")
-    print(
-        "   Example: If 'spread1' has RED dots on the RIGHT, it means HIGH spread1 values"
-    )
+    print("   Example: If 'spread1' has RED dots on the RIGHT, it means HIGH spread1 values")
     print("   strongly trigger a Parkinson's prediction.")
-    print(
-        "\n👉 ACTION ITEM: Look at the bottom 3-5 features on this plot. Add their exact"
-    )
+    print("\n👉 ACTION ITEM: Look at the bottom 3-5 features on this plot. Add their exact")
     print("string names to the 'FEATURES_TO_DROP' list in 'train_voice_pruned.py'.")
     print("=" * 50)
 

@@ -48,9 +48,7 @@ def main():
     X = df_pruned.drop(columns=["status"])
     y = df_pruned["status"]
 
-    print(
-        f"Dataset ready. Total Samples: {len(X)} | Features per sample: {X.shape[1]}\n"
-    )
+    print(f"Dataset ready. Total Samples: {len(X)} | Features per sample: {X.shape[1]}\n")
 
     # 3. Initialize Stratified K-Fold
     # n_splits=5 gives us an 80/20 train/test split for each fold
@@ -99,9 +97,7 @@ def main():
         # Safely calculate F-beta scores, ignoring division by zero warnings
         with np.errstate(divide="ignore", invalid="ignore"):
             fbeta_scores = (
-                (1 + beta**2)
-                * (precisions[:-1] * recalls[:-1])
-                / ((beta**2 * precisions[:-1]) + recalls[:-1])
+                (1 + beta**2) * (precisions[:-1] * recalls[:-1]) / ((beta**2 * precisions[:-1]) + recalls[:-1])
             )
 
         # Find the threshold that yields the highest F-beta score

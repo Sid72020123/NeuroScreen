@@ -1,7 +1,6 @@
 import os
 import glob
 import warnings
-import time
 import numpy as np
 import pandas as pd
 import joblib
@@ -81,24 +80,16 @@ def extract_praat_features(filepath):
 
         pulses = call([sound, pitch], "To PointProcess (cc)")
         jitter_pct = call(pulses, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
-        jitter_abs = call(
-            pulses, "Get jitter (local, absolute)", 0, 0, 0.0001, 0.02, 1.3
-        )
+        jitter_abs = call(pulses, "Get jitter (local, absolute)", 0, 0, 0.0001, 0.02, 1.3)
         rap = call(pulses, "Get jitter (rap)", 0, 0, 0.0001, 0.02, 1.3)
         ppq = call(pulses, "Get jitter (ppq5)", 0, 0, 0.0001, 0.02, 1.3)
         ddp = rap * 3
 
-        shimmer_pct = call(
-            [sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
-        shimmer_db = call(
-            [sound, pulses], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
+        shimmer_pct = call([sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        shimmer_db = call([sound, pulses], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         apq3 = call([sound, pulses], "Get shimmer (apq3)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         apq5 = call([sound, pulses], "Get shimmer (apq5)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
-        apq11 = call(
-            [sound, pulses], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
+        apq11 = call([sound, pulses], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         dda = apq3 * 3
 
         harmonicity = sound.to_harmonicity_cc()
@@ -148,7 +139,7 @@ def extract_praat_features(filepath):
             d2,
             ppe,
         ]
-    except Exception as e:
+    except Exception:
         return [np.nan] * 22
 
 
@@ -187,14 +178,10 @@ def main():
     # 1. LOAD OR BUILD DATASET
     # ==========================================
     if os.path.exists(CACHE_FILE):
-        print(
-            f"⚡ Loading cached dataset from {CACHE_FILE} (Skipping 10-min extraction)..."
-        )
+        print(f"⚡ Loading cached dataset from {CACHE_FILE} (Skipping 10-min extraction)...")
         df_master = pd.read_csv(CACHE_FILE)
     else:
-        print(
-            "⏳ Cache not found. Building master dataset (This will take a few minutes)..."
-        )
+        print("⏳ Cache not found. Building master dataset (This will take a few minutes)...")
         df_master = build_and_cache_dataset()
 
     print(f"\n✅ Master Dataset Loaded! Total Samples: {len(df_master)}")
@@ -209,9 +196,7 @@ def main():
         for f in FEATURES_TO_DROP:
             print(f"   - Dropped: {f}")
     else:
-        print(
-            "\n⚠️ No features pruned. (Update FEATURES_TO_DROP at the top of the script if needed)."
-        )
+        print("\n⚠️ No features pruned. (Update FEATURES_TO_DROP at the top of the script if needed).")
 
     X = df_master[features_to_keep]
     y = df_master["status"]
@@ -219,9 +204,7 @@ def main():
     # ==========================================
     # 3. PREPARE DATA & SCALE POS WEIGHT
     # ==========================================
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
     neg_count = (y_train == 0).sum()
     pos_count = (y_train == 1).sum()
@@ -247,9 +230,7 @@ def main():
     # ==========================================
     # 5. OPTIMIZE THRESHOLD FOR MAXIMUM ACCURACY
     # ==========================================
-    print(
-        "Optimizing Decision Threshold for Maximum Accuracy (with Recall Tie-Breaker)..."
-    )
+    print("Optimizing Decision Threshold for Maximum Accuracy (with Recall Tie-Breaker)...")
 
     # Get probability predictions for the test set (Probability of Class 1: Parkinson's)
     y_probs = xgb.predict_proba(X_test_scaled)[:, 1]
@@ -311,11 +292,7 @@ def main():
     print("=" * 50)
 
     print("\nRefined Classification Report (Using Accuracy-Optimized Threshold):")
-    print(
-        classification_report(
-            y_test, y_pred_final, target_names=["Healthy (0)", "Parkinson's (1)"]
-        )
-    )
+    print(classification_report(y_test, y_pred_final, target_names=["Healthy (0)", "Parkinson's (1)"]))
 
 
 if __name__ == "__main__":

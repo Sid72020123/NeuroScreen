@@ -96,9 +96,7 @@ def extract_praat_features(filepath):
         t0 = time.time()
         pulses = call([sound, pitch], "To PointProcess (cc)")
         jitter_pct = call(pulses, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
-        jitter_abs = call(
-            pulses, "Get jitter (local, absolute)", 0, 0, 0.0001, 0.02, 1.3
-        )
+        jitter_abs = call(pulses, "Get jitter (local, absolute)", 0, 0, 0.0001, 0.02, 1.3)
         rap = call(pulses, "Get jitter (rap)", 0, 0, 0.0001, 0.02, 1.3)
         ppq = call(pulses, "Get jitter (ppq5)", 0, 0, 0.0001, 0.02, 1.3)
         ddp = rap * 3
@@ -106,17 +104,11 @@ def extract_praat_features(filepath):
 
         # --- 4. Shimmer Features ---
         t0 = time.time()
-        shimmer_pct = call(
-            [sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
-        shimmer_db = call(
-            [sound, pulses], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
+        shimmer_pct = call([sound, pulses], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        shimmer_db = call([sound, pulses], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         apq3 = call([sound, pulses], "Get shimmer (apq3)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         apq5 = call([sound, pulses], "Get shimmer (apq5)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
-        apq11 = call(
-            [sound, pulses], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6
-        )
+        apq11 = call([sound, pulses], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
         dda = apq3 * 3
         print(f"      [+] Shimmer Extracted: {time.time() - t0:.2f}s")
 
@@ -155,9 +147,7 @@ def extract_praat_features(filepath):
             spread1, spread2, ppe = 0.0, 0.0, 0.0
         print(f"      [+] Spread/PPE Extracted: {time.time() - t0:.2f}s")
 
-        print(
-            f"  -> ✅ Finished {filename} in {time.time() - start_total:.2f}s total\n"
-        )
+        print(f"  -> ✅ Finished {filename} in {time.time() - start_total:.2f}s total\n")
 
         return [
             mean_pitch,
@@ -207,9 +197,7 @@ def build_local_dataset():
         features.append(extracted)
         labels.append(0)
 
-    print(
-        f"\n--- Starting Extraction for {len(parkinson_files)} 'Parkinson's' files ---"
-    )
+    print(f"\n--- Starting Extraction for {len(parkinson_files)} 'Parkinson's' files ---")
     for i, file_path in enumerate(parkinson_files, 1):
         print(f"[{i}/{len(parkinson_files)}] Processing Parkinson's Audio...")
         extracted = extract_praat_features(file_path)
@@ -256,9 +244,7 @@ def main():
     X = df_master[ALL_22_FEATURES]
     y = df_master["status"]
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
     # Dynamically calculate scale_pos_weight for XGBoost to handle class imbalance
     neg_count = (y_train == 0).sum()
@@ -299,16 +285,10 @@ def main():
 
     # Suppress runtime warnings for division by zero during F2 calculation
     with np.errstate(divide="ignore", invalid="ignore"):
-        f2_scores = (
-            (1 + beta**2)
-            * (precisions[:-1] * recalls[:-1])
-            / ((beta**2 * precisions[:-1]) + recalls[:-1])
-        )
+        f2_scores = (1 + beta**2) * (precisions[:-1] * recalls[:-1]) / ((beta**2 * precisions[:-1]) + recalls[:-1])
 
     # 4. Find the threshold that yields the absolute highest F2-Score
-    optimal_idx = np.nanargmax(
-        f2_scores
-    )  # nanargmax safely ignores division-by-zero errors
+    optimal_idx = np.nanargmax(f2_scores)  # nanargmax safely ignores division-by-zero errors
     optimal_threshold = thresholds[optimal_idx]
 
     # 5. Apply the new locked threshold
@@ -330,20 +310,14 @@ def main():
     print("\n" + "=" * 50)
     print("🚀 NEUROSCREEN MODEL TRAINING COMPLETE")
     print("=" * 50)
-    print(
-        f"1. Dynamically Calculated scale_pos_weight : {dynamic_scale_pos_weight:.4f}"
-    )
+    print(f"1. Dynamically Calculated scale_pos_weight : {dynamic_scale_pos_weight:.4f}")
     print(f"2. Optimal F2-Score Threshold Locked       : {optimal_threshold:.4f}")
     print(f"3. Final Locked Recall (Sensitivity)       : {final_recall * 100:.2f}%")
     print(f"4. Final Accuracy Score                    : {final_acc * 100:.2f}%")
     print("=" * 50)
 
     print("\nRefined Classification Report (Using F2-Optimized Threshold):")
-    print(
-        classification_report(
-            y_test, y_pred_custom, target_names=["Healthy (0)", "Parkinson's (1)"]
-        )
-    )
+    print(classification_report(y_test, y_pred_custom, target_names=["Healthy (0)", "Parkinson's (1)"]))
 
 
 if __name__ == "__main__":
