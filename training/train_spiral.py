@@ -43,28 +43,76 @@ PHASE_2_EPOCHS = 30
 # ==========================================
 # 1. STRICT OPENCV PREPROCESSING PIPELINE
 # ==========================================
+def crop_to_spiral(img_array):
+    """
+    Aggressively crops the image tightly to all ink strokes.
+    Converts to grayscale, isolates ink, finds all contours, 
+    calculates the absolute bounding box, and applies 10px padding.
+    """
+    # 1. Convert to grayscale, handling various input formats
+    if len(img_array.shape) > 2 and img_array.shape[2] == 4:
+        alpha_channel = img_array[:, :, 3]
+        rgb_channels = img_array[:, :, :3]
+        white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
+        alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
+        blended_img = (rgb_channels * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
+        img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
+        img_color = blended_img
+    elif len(img_array.shape) == 3:
+        img_gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+        img_color = img_array
+    else:
+        img_gray = img_array.copy()
+        img_color = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
+
+    # 2. Apply Gaussian Blur and Otsu's thresholding to isolate ink
+    blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
+    _, binary_img = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    # 3. Locate all ink strokes
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return img_color, binary_img
+
+    # 4. Calculate absolute bounding box encompassing ALL contours
+    min_x = min(cv2.boundingRect(c)[0] for c in contours)
+    min_y = min(cv2.boundingRect(c)[1] for c in contours)
+    max_x = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in contours)
+    max_y = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in contours)
+
+    # 5. Add a small, strict padding (10 pixels)
+    pad = 10
+    h, w = img_gray.shape
+    min_x = max(0, min_x - pad)
+    min_y = max(0, min_y - pad)
+    max_x = min(w, max_x + pad)
+    max_y = min(h, max_y + pad)
+
+    # 6. Crop the original images
+    cropped_color_img = img_color[min_y:max_y, min_x:max_x]
+    cropped_binary_img = binary_img[min_y:max_y, min_x:max_x]
+
+    # 7. Return the cropped images
+    return cropped_color_img, cropped_binary_img
+
+
 def preprocess_image(image_path):
     """
     Strict preprocessing pipeline to match production exactly.
-    Applies Gaussian Blur, Otsu's Thresholding, and formats for MobileNetV2.
+    Applies aggressive cropping, formats for MobileNetV2.
     """
-    # 1. Read image and convert to grayscale
-    gray = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    if gray is None:
+    img_raw = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+    if img_raw is None:
         return None
 
-    # 2. Apply Gaussian Blur to smooth out high-frequency noise
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Use the aggressive cropping function
+    cropped_color_img, cropped_binary_img = crop_to_spiral(img_raw)
 
-    # 3. Apply Otsu's Thresholding (Inverse)
-    # This completely separates the background from the ink.
-    # THRESH_BINARY_INV makes the ink white (255) and the background black (0).
-    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Convert back to 3-channel RGB
+    rgb_img = cv2.cvtColor(cropped_binary_img, cv2.COLOR_GRAY2RGB)
 
-    # 4. Convert back to 3-channel RGB
-    rgb_img = cv2.cvtColor(thresh, cv2.COLOR_GRAY2RGB)
-
-    # 5. Resize to (224, 224) and apply MobileNetV2 preprocessing
+    # Resize to (224, 224) and apply MobileNetV2 preprocessing
     resized = cv2.resize(rgb_img, IMG_SIZE)
     img_array = np.array(resized, dtype=np.float32)
     img_preprocessed = preprocess_input(img_array)

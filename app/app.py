@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", message=".*The structure of `inputs` doesn't m
 # Suppress expected fallback behavior in nolds nonlinear math equations
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="nolds")
 
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from zoneinfo import ZoneInfo
 import base64
@@ -188,7 +188,7 @@ login_manager.login_message_category = "warning"
 @app.context_processor
 def inject_year():
     """Inject the current year into all templates."""
-    return {"year": datetime.utcnow().year}
+    return {"year": datetime.now(timezone.utc).year}
 
 
 class User(UserMixin, db.Model):
@@ -200,7 +200,7 @@ class User(UserMixin, db.Model):
     age = db.Column(db.Integer, nullable=True)
     gender = db.Column(db.String(10), nullable=True)
     is_doctor = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     sessions = db.relationship(
         "ScreeningSession",
@@ -215,7 +215,7 @@ class ScreeningSession(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     voice_score = db.Column(db.Float, nullable=True)
     spiral_score = db.Column(db.Float, nullable=True)
     final_score = db.Column(db.Float, nullable=True)
@@ -1293,6 +1293,60 @@ def upload_voice():
             os.remove(temp_path)
 
 
+def crop_to_spiral(img_array):
+    """
+    Aggressively crops the image tightly to all ink strokes.
+    Converts to grayscale, isolates ink, finds all contours, 
+    calculates the absolute bounding box, and applies 10px padding.
+    """
+    # 2. Convert to grayscale, handling various input formats
+    if len(img_array.shape) > 2 and img_array.shape[2] == 4:
+        alpha_channel = img_array[:, :, 3]
+        rgb_channels = img_array[:, :, :3]
+        white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
+        alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
+        blended_img = (rgb_channels * alpha_factor + white_background * (1 - alpha_factor)).astype(np.uint8)
+        img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
+        img_color = blended_img
+    elif len(img_array.shape) == 3:
+        img_gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+        img_color = img_array
+    else:
+        img_gray = img_array.copy()
+        img_color = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
+
+    # Apply Gaussian Blur and Otsu's thresholding to isolate ink
+    blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
+    _, binary_img = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    # 3. Locate all ink strokes
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return img_color, binary_img
+
+    # 4. Calculate absolute bounding box encompassing ALL contours
+    min_x = min(cv2.boundingRect(c)[0] for c in contours)
+    min_y = min(cv2.boundingRect(c)[1] for c in contours)
+    max_x = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in contours)
+    max_y = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in contours)
+
+    # 5. Add a small, strict padding (10 pixels)
+    pad = 10
+    h, w = img_gray.shape
+    min_x = max(0, min_x - pad)
+    min_y = max(0, min_y - pad)
+    max_x = min(w, max_x + pad)
+    max_y = min(h, max_y + pad)
+
+    # 6. Crop the original images
+    cropped_color_img = img_color[min_y:max_y, min_x:max_x]
+    cropped_binary_img = binary_img[min_y:max_y, min_x:max_x]
+
+    # 7. Return the cropped images
+    return cropped_color_img, cropped_binary_img
+
+
 def _preprocess_spiral_image(img_bytes):
     """
     Applies the strict preprocessing pipeline to an in-memory image.
@@ -1303,69 +1357,18 @@ def _preprocess_spiral_image(img_bytes):
     nparr = np.frombuffer(img_bytes, np.uint8)
     img_raw = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
 
-    # 2. Convert to grayscale, handling various input formats (RGBA, BGR, GRAY).
-    if len(img_raw.shape) > 2 and img_raw.shape[2] == 4:
-        # Handle RGBA from canvas: blend alpha onto a white background first.
-        alpha_channel = img_raw[:, :, 3]
-        rgb_channels = img_raw[:, :, :3]
-        white_background = np.ones_like(rgb_channels, dtype=np.uint8) * 255
-        alpha_factor = alpha_channel[:, :, np.newaxis].astype(np.float32) / 255.0
-        blended_img = (
-            rgb_channels * alpha_factor + white_background * (1 - alpha_factor)
-        ).astype(np.uint8)
-        img_gray = cv2.cvtColor(blended_img, cv2.COLOR_BGR2GRAY)
-        img_color = blended_img
-    elif len(img_raw.shape) == 3:
-        # Handle standard BGR images.
-        img_gray = cv2.cvtColor(img_raw, cv2.COLOR_BGR2GRAY)
-        img_color = img_raw
-    else:
-        # Assume it's already grayscale.
-        img_gray = img_raw
-        img_color = cv2.cvtColor(img_raw, cv2.COLOR_GRAY2BGR)
+    # Use the aggressive cropping function
+    cropped_color_img, cropped_binary_img = crop_to_spiral(img_raw)
 
-    # 3. Apply a slight Gaussian Blur to remove pixel noise before thresholding.
-    blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
-
-    # 4. Use Otsu's Binarization to separate ink from background.
-    _, binary_img = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-
-    # 5. Crop to the largest contour (the spiral) to remove edge artifacts.
-    contours, _ = cv2.findContours(
-        binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-
-    cropped_binary_img = binary_img  # Default to the uncropped image
-    cropped_color_img = img_color
-    
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(largest_contour)
-        
-        cropped_img = binary_img[y : y + h, x : x + w]
-        c_color_img = img_color[y : y + h, x : x + w]
-        
-        pad = 10
-        cropped_binary_img = cv2.copyMakeBorder(
-            cropped_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0
-        )
-        cropped_color_img = cv2.copyMakeBorder(
-            c_color_img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255)
-        )
-
-    # 6. Resize to (224, 224) for the model input.
+    # Resize to (224, 224) for the model input.
     resized_img = cv2.resize(
         cropped_binary_img, (224, 224), interpolation=cv2.INTER_AREA
     )
 
-    # 7. Convert grayscale binary image back to 3-channel for MobileNetV2.
+    # Convert grayscale binary image back to 3-channel for MobileNetV2.
     model_input_img = cv2.cvtColor(resized_img, cv2.COLOR_GRAY2RGB)
 
-    # 8. Expand dimensions and apply MobileNetV2 preprocessing.
-    # The `np.expand_dims` is critical to create the batch dimension (1, 224, 224, 3),
-    # which resolves Keras input shape warnings.
+    # Expand dimensions and apply MobileNetV2 preprocessing.
     img_expanded = np.expand_dims(model_input_img, axis=0)
     processed_img_tensor = tf.keras.applications.mobilenet_v2.preprocess_input(
         img_expanded.astype(np.float32)
